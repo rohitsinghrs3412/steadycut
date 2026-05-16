@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SteadyCut
 
-## Getting Started
+A private personal weight-loss consistency app built with Next.js App Router,
+TypeScript, Tailwind CSS, shadcn/ui, Clerk, Convex, Recharts, React Hook Form,
+Zod, lucide-react, and the Vercel AI SDK Google provider.
 
-First, run the development server:
+## Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+In local development, `/dashboard` runs in preview mode with local demo data so
+the interface can be checked immediately, even before the live services are
+ready.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment
 
-## Learn More
+Copy `.env.example` to `.env.local` and fill in:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+NEXT_PUBLIC_CONVEX_URL=
+CLERK_JWT_ISSUER_DOMAIN=
+GOOGLE_GENERATIVE_AI_API_KEY=
+STEADYCUT_LIVE_MODE=
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Set `STEADYCUT_LIVE_MODE=true` in `.env.local` when Clerk, Convex, and Gemini
+are all ready and you want local routes to require live authentication.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Clerk + Convex Setup
 
-## Deploy on Vercel
+1. Create or open a Clerk application.
+2. Copy the Clerk publishable and secret keys into `.env.local`.
+3. In Clerk, enable the Convex integration.
+4. Copy the Clerk Frontend API URL into `CLERK_JWT_ISSUER_DOMAIN`.
+5. Run `npx convex dev` and follow the login/project prompts.
+6. Copy the generated Convex URL into `NEXT_PUBLIC_CONVEX_URL`.
+7. Run the app with `npm run dev`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The checked-in `convex/_generated` files are local shims because this workspace
+is not linked to a Convex deployment yet. Running `npx convex dev` after linking
+will regenerate the official Convex files.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Gemini Setup
+
+Add a Gemini API key from Google AI Studio as:
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
+```
+
+The coach action uses `gemini-2.5-flash` and includes guardrails to keep output
+motivational and behavioral rather than medical advice.
+
+## Web Push Reminders
+
+Generate VAPID keys without committing them:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Add the public/private pair to Vercel and `.env.local` as `VAPID_PUBLIC_KEY`
+and `VAPID_PRIVATE_KEY`.
+
+## Deploying to Production
+
+In Vercel, swap local/development values for production values:
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+CLERK_SECRET_KEY=sk_live_...
+NEXT_PUBLIC_CONVEX_URL=
+CONVEX_DEPLOY_KEY=
+GOOGLE_GENERATIVE_AI_API_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+```
+
+In the Clerk dashboard, use the production Clerk instance and set the
+application display name to `SteadyCut`. The deployed sign-in page should not
+show Clerk's development mode banner.
+
+## Checks
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
