@@ -6,6 +6,7 @@ Sentry.init({
   dsn: sentryDsn,
   enabled: Boolean(sentryDsn),
   sendDefaultPii: false,
+  enableLogs: true,
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1.0,
