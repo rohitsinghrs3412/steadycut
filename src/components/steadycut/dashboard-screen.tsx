@@ -382,7 +382,7 @@ function CalorieStatusCard({
   return (
     <Card
       className={cn(
-        "min-w-0 border-primary/20",
+        "min-w-0 glass-card transition-all duration-300",
         compact && "bg-accent/35"
       )}
       size={compact ? "sm" : "default"}
@@ -489,7 +489,7 @@ export function DemoCaloriePhotoCard() {
   }
 
   return (
-    <Card size="sm">
+    <Card size="sm" className="glass-card transition-all duration-300">
       <CardHeader className="flex-row items-start justify-between">
         <div>
           <CardTitle>Photo calories</CardTitle>
@@ -574,7 +574,7 @@ function TodayCheckInCard({
   }
 
   return (
-    <Card>
+    <Card className="glass-card transition-all duration-300">
       <CardHeader className="pb-3">
         <CardTitle>{"Today's check-in"}</CardTitle>
       </CardHeader>
@@ -667,7 +667,7 @@ function HabitsCard({
   onToggleHabit: (habitId: string, checked: boolean) => Promise<void>;
 }) {
   return (
-    <Card>
+    <Card className="glass-card transition-all duration-300">
       <CardHeader className="flex-row items-center justify-between pb-3">
         <div>
           <CardTitle>Habits</CardTitle>
@@ -756,7 +756,7 @@ function WeightTrendCard({
   weeklySpeed: number | null;
 }) {
   return (
-    <Card size={compact ? "sm" : "default"}>
+    <Card size={compact ? "sm" : "default"} className="glass-card transition-all duration-300">
       <CardHeader className="flex-row items-start justify-between pb-2">
         <div>
           <CardTitle>Weight trend</CardTitle>
@@ -855,7 +855,7 @@ function ConsistencyCard({
   weekKeys: string[];
 }) {
   return (
-    <Card>
+    <Card className="glass-card transition-all duration-300">
       <CardHeader>
         <CardTitle>Streak & consistency</CardTitle>
       </CardHeader>
@@ -940,7 +940,7 @@ function DailyCoachCard({
   onGenerate: () => Promise<void>;
 }) {
   return (
-    <Card className="xl:min-h-full">
+    <Card className="xl:min-h-full glass-card transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
       <CardHeader className="flex-row items-start justify-between">
         <CardTitle>Daily coach</CardTitle>
         <div className="flex items-center gap-2 text-sm font-medium text-chart-1">
@@ -1001,7 +1001,7 @@ function RecentCheckInsCard({
   const recent = [...checkIns].reverse().slice(0, 6);
 
   return (
-    <Card>
+    <Card className="glass-card transition-all duration-300">
       <CardHeader>
         <CardTitle>Recent check-ins</CardTitle>
       </CardHeader>
@@ -1011,7 +1011,10 @@ function RecentCheckInsCard({
             const change = getPreviousWeightChange(checkIn, checkIns);
 
             return (
-              <div key={checkIn.id} className="rounded-lg border p-4">
+              <div 
+                key={checkIn.id} 
+                className="rounded-lg p-4 glass-card spring-bounce border border-border hover:border-primary/50 transition-all duration-300"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-medium">
                     {formatDisplayDate(checkIn.date)}

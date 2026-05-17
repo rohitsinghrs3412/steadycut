@@ -4,7 +4,7 @@ import { anyApi } from "convex/server";
 import { v } from "convex/values";
 import { z } from "zod";
 
-import { action, internalMutation, query } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { getUserId } from "./lib/auth";
 import { scaleTimeOfDayValidator } from "./schema";
 
@@ -195,3 +195,59 @@ async function readScale({
     };
   }
 }
+
+export const updateWeight = mutation({
+  args: {
+    id: v.id("scaleLogs"),
+    weightKg: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) {
+      throw new Error("Unauthorized or scale log not found");
+    }
+
+    const updatedAt = Date.now();
+    await ctx.db.patch(args.id, {
+      weightKg: args.weightKg,
+      needsManualReview: false,
+      confidence: 1.0,
+    });
+
+    const existingCheckIn = await ctx.db
+      .query("checkIns")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", userId).eq("date", existing.date)
+      )
+      .unique();
+
+    const note =
+      existingCheckIn?.note ??
+      `Scale photo ${existing.timeOfDay} reading (manually corrected): ${args.weightKg} kg.`;
+
+    if (existingCheckIn) {
+      await ctx.db.patch(existingCheckIn._id, {
+        weight: args.weightKg,
+        note,
+        updatedAt,
+      });
+    } else {
+      await ctx.db.insert("checkIns", {
+        userId,
+        date: existing.date,
+        weight: args.weightKg,
+        note,
+        mood: "good",
+        completedHabitIds: [],
+        createdAt: updatedAt,
+        updatedAt,
+      });
+    }
+
+    return {
+      success: true,
+    };
+  },
+});
+
