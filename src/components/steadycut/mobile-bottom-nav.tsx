@@ -142,7 +142,7 @@ function QuickLogSheet() {
         </Button>
       </SheetTrigger>
       <SheetContent
-        className="max-h-[88svh] overflow-y-auto rounded-t-lg p-0"
+        className="max-h-[88svh] overflow-y-auto rounded-t-2xl p-0 glass-card bg-transparent border-t border-white/10 dark:border-white/5"
         side="bottom"
       >
         <SheetHeader className="border-b pr-14">

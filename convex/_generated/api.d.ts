@@ -20,6 +20,7 @@ import type * as mealLogs from "../mealLogs.js";
 import type * as profiles from "../profiles.js";
 import type * as pushActions from "../pushActions.js";
 import type * as pushNotifications from "../pushNotifications.js";
+import type * as scaleAnalysis from "../scaleAnalysis.js";
 import type * as scaleLogs from "../scaleLogs.js";
 import type * as uploads from "../uploads.js";
 
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   profiles: typeof profiles;
   pushActions: typeof pushActions;
   pushNotifications: typeof pushNotifications;
+  scaleAnalysis: typeof scaleAnalysis;
   scaleLogs: typeof scaleLogs;
   uploads: typeof uploads;
 }>;

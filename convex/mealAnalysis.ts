@@ -11,8 +11,8 @@ import { getUserId } from "./lib/auth";
 import { mealTypeValidator } from "./schema";
 
 const mealItemSchema = z.object({
-  name: z.string().min(2).max(90),
-  calories: z.number().min(1).max(3000),
+  name: z.string().min(2).max(150),
+  calories: z.number().min(0).max(3000),
   proteinGrams: z.number().min(0).max(250).nullable().optional(),
   carbsGrams: z.number().min(0).max(400).nullable().optional(),
   fatGrams: z.number().min(0).max(250).nullable().optional(),
@@ -23,12 +23,12 @@ const mealEstimateSchema = z.object({
   foodName: z
     .string()
     .min(2)
-    .max(90)
+    .max(150)
     .describe("Short display name for the overall meal."),
   items: z
     .array(mealItemSchema)
     .min(1)
-    .max(8)
+    .max(20)
     .describe("Separate visible meal items with kcal and macro estimates."),
   confidence: z
     .number()
@@ -37,7 +37,7 @@ const mealEstimateSchema = z.object({
     .describe(
       "Confidence from 0.05 to 1. If using a 1-10 or 1-100 scale, the server will normalize it."
     ),
-  assumptions: z.array(z.string().min(3).max(140)).min(1).max(5),
+  assumptions: z.array(z.string().min(3).max(140)).min(1).max(15),
   followUpQuestion: z.string().min(5).max(180).nullable().optional(),
 });
 

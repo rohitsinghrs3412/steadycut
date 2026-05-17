@@ -488,7 +488,7 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
     <Card 
       size={compact ? "sm" : "default"}
       className={cn(
-        "glass-card transition-all duration-300",
+        "glass-card !overflow-visible transition-all duration-300",
         isBusy && "glow-highlight-primary"
       )}
     >
@@ -730,7 +730,7 @@ function ScalePhotoLogger({ compact = false }: { compact?: boolean }) {
     <Card 
       size={compact ? "sm" : "default"}
       className={cn(
-        "glass-card transition-all duration-300",
+        "glass-card !overflow-visible transition-all duration-300",
         isBusy && "glow-highlight-primary"
       )}
     >
