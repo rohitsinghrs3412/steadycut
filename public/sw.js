@@ -1,5 +1,13 @@
-const CACHE_NAME = "steadycut-shell-v1";
-const APP_SHELL_URLS = ["/", "/offline", "/icon.svg"];
+const CACHE_NAME = "steadycut-shell-v3";
+const NOTIFICATION_ICON = "/icon-192x192.png";
+const NOTIFICATION_BADGE = "/badge-96x96.png";
+const APP_SHELL_URLS = [
+  "/",
+  "/offline",
+  "/icon.svg",
+  NOTIFICATION_ICON,
+  NOTIFICATION_BADGE,
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -47,7 +55,9 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/_next/static/") ||
     url.pathname === "/icon.svg" ||
     url.pathname === "/maskable-icon.svg" ||
-    url.pathname === "/apple-touch-icon.svg"
+    url.pathname === "/apple-touch-icon.svg" ||
+    url.pathname === NOTIFICATION_ICON ||
+    url.pathname === NOTIFICATION_BADGE
   ) {
     event.respondWith(staleWhileRevalidate(request));
   }
@@ -63,8 +73,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title || "SteadyCut", {
       body: payload.body || "Time to check in.",
-      icon: "/icon.svg",
-      badge: "/maskable-icon.svg",
+      icon: payload.icon || NOTIFICATION_ICON,
+      badge: payload.badge || NOTIFICATION_BADGE,
+      vibrate: [80, 40, 80],
       data: {
         url: payload.url || "/dashboard",
       },

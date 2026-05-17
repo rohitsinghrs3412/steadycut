@@ -62,6 +62,18 @@ export function MobileNavButton({ streak = 0 }: { streak?: number }) {
   );
 }
 
+export function MobileHeaderLogo() {
+  return (
+    <Link
+      aria-label="SteadyCut home"
+      className="absolute left-1/2 top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20 lg:hidden"
+      href="/dashboard"
+    >
+      <Flame />
+    </Link>
+  );
+}
+
 export function AppSidebarContent({ streak = 0 }: { streak?: number }) {
   const pathname = usePathname();
   const { dashboard } = useDashboardQuery();

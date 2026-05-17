@@ -43,6 +43,7 @@ import { z } from "zod";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   DesktopAppSidebar,
+  MobileHeaderLogo,
   MobileNavButton,
 } from "@/components/steadycut/app-sidebar";
 import {
@@ -312,7 +313,7 @@ function TopBar({
   streak: number;
 }) {
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-8">
+    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-8 relative">
       <div className="flex min-w-0 items-center gap-3">
         <MobileNavButton streak={streak} />
         <div className="min-w-0">
@@ -324,6 +325,7 @@ function TopBar({
           </p>
         </div>
       </div>
+      <MobileHeaderLogo />
 
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <div className="hidden items-center gap-2 md:flex">
@@ -440,12 +442,12 @@ function CalorieStatusCard({
           </div>
           <Button
             asChild
-            className="size-8 shrink-0 px-0 sm:w-auto sm:px-2.5"
+            className="size-8 shrink-0 px-0 sm:h-7 sm:w-auto sm:px-2.5"
             size="sm"
             variant="outline"
           >
             <Link href="/coach" scroll={false}>
-              <Camera data-icon="inline-start" />
+              <Camera />
               <span className="sr-only sm:not-sr-only">Photo</span>
             </Link>
           </Button>

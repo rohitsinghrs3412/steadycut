@@ -43,8 +43,11 @@ export const metadata: Metadata = {
     title: "SteadyCut",
   },
   icons: {
-    icon: "/icon.svg",
-    apple: "/apple-touch-icon.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
 };
 
@@ -52,7 +55,7 @@ export const viewport: Viewport = {
   colorScheme: "light dark",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f9fbf8" },
-    { media: "(prefers-color-scheme: dark)", color: "#171719" },
+    { media: "(prefers-color-scheme: dark)", color: "#070a10" },
   ],
 };
 

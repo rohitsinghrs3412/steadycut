@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SteadyCut">
-  <rect width="512" height="512" rx="112" fill="#f9fbf8"/>
-  <path fill="#2fa569" d="M256 74c45 58 99 115 99 191 0 70-45 123-99 123s-99-53-99-123c0-76 54-133 99-191Z"/>
-  <path fill="#f3c34d" d="M256 169c27 36 60 72 60 119 0 43-27 76-60 76s-60-33-60-76c0-47 33-83 60-119Z"/>
-  <path fill="#18251f" d="M166 408h180a26 26 0 0 1 26 26v4a26 26 0 0 1-26 26H166a26 26 0 0 1-26-26v-4a26 26 0 0 1 26-26Z"/>
+  <rect width="512" height="512" rx="112" fill="#5b9cff"/>
+  <svg x="102" y="102" width="308" height="308" viewBox="0 0 24 24">
+    <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" fill="none" stroke="#070a10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+  </svg>
 </svg>

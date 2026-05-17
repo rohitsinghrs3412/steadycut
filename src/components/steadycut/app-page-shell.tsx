@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import {
   DesktopAppSidebar,
+  MobileHeaderLogo,
   MobileNavButton,
 } from "@/components/steadycut/app-sidebar";
 import { ThemeIconButton } from "@/components/steadycut/theme-controls";
@@ -32,7 +33,7 @@ export function AppPageShell({
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
       <DesktopAppSidebar streak={streak} />
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-8">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-8 relative">
           <div className="flex min-w-0 items-center gap-3">
             <MobileNavButton streak={streak} />
             <div className="min-w-0">
@@ -42,6 +43,7 @@ export function AppPageShell({
               </p>
             </div>
           </div>
+          <MobileHeaderLogo />
 
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <div className="hidden items-center gap-2 md:flex">

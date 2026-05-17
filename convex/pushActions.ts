@@ -29,8 +29,10 @@ export const sendTest = action({
 
     await sendPush(subscription, {
       title: "SteadyCut reminder",
-      body: "Test notification is working.",
+      body: "Your daily check-in reminder is ready.",
       url: "/dashboard",
+      icon: "/icon-192x192.png",
+      badge: "/badge-96x96.png",
     });
 
     return true;
@@ -62,6 +64,8 @@ export const sendDueReminders = action({
           title: "Morning weigh-in?",
           body: "Log today's weight while the signal is clean.",
           url: "/dashboard",
+          icon: "/icon-192x192.png",
+          badge: "/badge-96x96.png",
         });
         await ctx.runMutation(anyApi.pushNotifications.markReminderSent, {
           id: subscription._id,
@@ -91,6 +95,8 @@ async function sendPush(
     title: string;
     body: string;
     url: string;
+    icon?: string;
+    badge?: string;
   }
 ) {
   const publicKey = process.env.VAPID_PUBLIC_KEY;

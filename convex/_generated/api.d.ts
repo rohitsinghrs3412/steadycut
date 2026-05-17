@@ -15,6 +15,7 @@ import type * as dashboard from "../dashboard.js";
 import type * as habits from "../habits.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_defaultHabits from "../lib/defaultHabits.js";
+import type * as mealAnalysis from "../mealAnalysis.js";
 import type * as mealLogs from "../mealLogs.js";
 import type * as profiles from "../profiles.js";
 import type * as pushActions from "../pushActions.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   habits: typeof habits;
   "lib/auth": typeof lib_auth;
   "lib/defaultHabits": typeof lib_defaultHabits;
+  mealAnalysis: typeof mealAnalysis;
   mealLogs: typeof mealLogs;
   profiles: typeof profiles;
   pushActions: typeof pushActions;
