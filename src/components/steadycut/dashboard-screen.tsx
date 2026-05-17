@@ -337,7 +337,7 @@ function TopBar({
           <Sparkles />
           <span>{mode === "live" ? "Live estimates" : "Preview mode"}</span>
         </div>
-        <ThemeIconButton className="hidden sm:inline-flex lg:hidden" />
+        <ThemeIconButton className="shrink-0" />
         <Button asChild className="hidden lg:hidden" size="icon" variant="outline">
           <Link href="/settings">
             <Settings />
