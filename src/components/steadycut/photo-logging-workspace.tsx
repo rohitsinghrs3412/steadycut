@@ -1187,12 +1187,14 @@ function RecentScaleLogs({ compact = false }: { compact?: boolean }) {
 function ScaleLogCard({ log }: { log: ScaleLog }) {
   const updateWeight = useMutation(api.scaleLogs.updateWeight);
   const [isEditing, setIsEditing] = useState(false);
+  const [prevWeightKg, setPrevWeightKg] = useState(log.weightKg);
   const [inputValue, setInputValue] = useState(log.weightKg ? String(log.weightKg) : "");
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
+  if (log.weightKg !== prevWeightKg) {
+    setPrevWeightKg(log.weightKg);
     setInputValue(log.weightKg ? String(log.weightKg) : "");
-  }, [log.weightKg]);
+  }
 
   async function handleSave() {
     const num = parseFloat(inputValue);
