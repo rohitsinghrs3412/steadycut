@@ -77,10 +77,10 @@ export default function RootLayout({
         <RootProviders
           clerkPublishableKey={
             hasCoreServerConfig
-              ? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ""
+              ? (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim()
               : ""
           }
-          convexUrl={process.env.NEXT_PUBLIC_CONVEX_URL ?? ""}
+          convexUrl={(process.env.NEXT_PUBLIC_CONVEX_URL ?? "").trim()}
         >
           {children}
         </RootProviders>

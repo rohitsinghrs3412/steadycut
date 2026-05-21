@@ -75,7 +75,8 @@ function ConvexClerkProvider({
   children,
   convexUrl,
 }: PropsWithChildren<{ convexUrl: string }>) {
-  const convex = useMemo(() => new ConvexReactClient(convexUrl), [convexUrl]);
+  const trimmedUrl = convexUrl.trim();
+  const convex = useMemo(() => new ConvexReactClient(trimmedUrl), [trimmedUrl]);
 
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>

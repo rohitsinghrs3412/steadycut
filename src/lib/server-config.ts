@@ -1,11 +1,11 @@
 export const serverConfig = {
-  clerkPublishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "",
-  clerkSecretKey: process.env.CLERK_SECRET_KEY ?? "",
-  convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL ?? "",
-  clerkJwtIssuerDomain: process.env.CLERK_JWT_ISSUER_DOMAIN ?? "",
-  geminiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "",
-  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
-  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  clerkPublishableKey: (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim(),
+  clerkSecretKey: (process.env.CLERK_SECRET_KEY ?? "").trim(),
+  convexUrl: (process.env.NEXT_PUBLIC_CONVEX_URL ?? "").trim(),
+  clerkJwtIssuerDomain: (process.env.CLERK_JWT_ISSUER_DOMAIN ?? "").trim(),
+  geminiApiKey: (process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "").trim(),
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY ?? "").trim(),
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY ?? "").trim(),
 };
 
 export const hasClerkServerConfig = Boolean(
