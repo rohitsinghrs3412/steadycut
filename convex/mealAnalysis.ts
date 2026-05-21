@@ -1,17 +1,21 @@
 "use node";
 
 import { google } from "@ai-sdk/google";
-import { generateText, Output } from "ai";
+import { APICallError, generateText, NoObjectGeneratedError, Output } from "ai";
 import { anyApi } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { z } from "zod";
 
 import { action } from "./_generated/server";
 import { getUserId } from "./lib/auth";
 import { mealTypeValidator } from "./schema";
 
+const MAX_REASONABLE_PORTION_GRAMS = 5000;
+const NON_FOOD_DESCRIPTION_PATTERN =
+  /\b(human|human being|person|people|man|woman|boy|girl|child|face|selfie|body)\b/i;
+
 const mealItemSchema = z.object({
-  name: z.string().min(2).max(150),
+  name: z.string().min(2).max(250),
   calories: z.number().min(0).max(3000),
   proteinGrams: z.number().min(0).max(250).nullable().optional(),
   carbsGrams: z.number().min(0).max(400).nullable().optional(),
@@ -23,7 +27,7 @@ const mealEstimateSchema = z.object({
   foodName: z
     .string()
     .min(2)
-    .max(150)
+    .max(250)
     .describe("Short display name for the overall meal."),
   items: z
     .array(mealItemSchema)
@@ -37,8 +41,8 @@ const mealEstimateSchema = z.object({
     .describe(
       "Confidence from 0.05 to 1. If using a 1-10 or 1-100 scale, the server will normalize it."
     ),
-  assumptions: z.array(z.string().min(3).max(140)).min(1).max(15),
-  followUpQuestion: z.string().min(5).max(180).nullable().optional(),
+  assumptions: z.array(z.string().min(3).max(500)).min(1).max(15),
+  followUpQuestion: z.string().min(5).max(500).nullable().optional(),
 });
 
 type MealEstimate = z.infer<typeof mealEstimateSchema>;
@@ -67,60 +71,51 @@ export const analyzeMealPhoto = action({
   },
   handler: async (ctx, args) => {
     const userId = await getUserId(ctx);
-    const blob = await ctx.storage.get(args.photoId);
 
-    if (!blob) {
-      throw new Error("Uploaded meal photo could not be found.");
-    }
+    try {
+      validateMealRequest(args);
 
-    const image = await blob.arrayBuffer();
-    const mediaType = blob.type || "image/jpeg";
-    const estimate = await estimateMeal({
-      image,
-      mediaType,
-      mealType: args.mealType,
-      description: args.description,
-      portionGrams: args.portionGrams,
-    });
+      const blob = await ctx.storage.get(args.photoId);
 
-    if (args.placeholderMealLogId) {
-      const placeholder = await ctx.runQuery(anyApi.mealLogs.getMealLogForUser, {
-        id: args.placeholderMealLogId,
-      });
-
-      if (!placeholder) {
-        throw new Error("Meal placeholder not found.");
+      if (!blob) {
+        throw new ConvexError("Uploaded meal photo could not be found.");
       }
 
-      return {
-        id: args.placeholderMealLogId,
+      const image = await blob.arrayBuffer();
+      const mediaType = blob.type || "image/jpeg";
+      const estimate = await estimateMeal({
+        image,
+        mediaType,
+        mealType: args.mealType,
+        description: args.description,
+        portionGrams: args.portionGrams,
+      });
+
+      return await ctx.runMutation(anyApi.mealLogs.saveMealLog, {
         userId,
         date: args.date,
         mealType: args.mealType,
         photoId: args.photoId,
         description: args.description,
         portionGrams: args.portionGrams,
-        status: "ready" as const,
-        ...summarizeMealEstimate(estimate),
-        confidence: estimate.confidence,
-        assumptions: estimate.assumptions,
-        followUpQuestion: estimate.followUpQuestion,
-        createdAt: placeholder.createdAt,
-        updatedAt: Date.now(),
-        photoUrl: await ctx.storage.getUrl(args.photoId),
-      };
-    }
+        existingMealLogId:
+          args.placeholderMealLogId ?? args.existingMealLogId,
+        ...estimate,
+      });
+    } catch (caught) {
+      if (args.placeholderMealLogId) {
+        try {
+          await ctx.runMutation(anyApi.mealLogs.deleteMealLogForUser, {
+            id: args.placeholderMealLogId,
+            userId,
+          });
+        } catch (cleanupError) {
+          console.error("Failed to clean up meal placeholder", cleanupError);
+        }
+      }
 
-    return await ctx.runMutation(anyApi.mealLogs.saveMealLog, {
-      userId,
-      date: args.date,
-      mealType: args.mealType,
-      photoId: args.photoId,
-      description: args.description,
-      portionGrams: args.portionGrams,
-      existingMealLogId: args.existingMealLogId,
-      ...estimate,
-    });
+      throw getClientSafeMealAnalysisError(caught);
+    }
   },
 });
 
@@ -146,6 +141,8 @@ async function estimateMeal({
   try {
     const { output } = await generateText({
       model: google("gemini-2.5-flash"),
+      maxRetries: 4,
+      timeout: { totalMs: 60000 },
       output: Output.object({ schema: mealEstimateSchema }),
       system:
         "You estimate calories from food photos for a private Indian user. Return careful estimates, not medical advice. Consider common Indian foods, oil/ghee, sauces, fried items, rice/roti portions, and visible serving size. Always make the best reasonable estimate from the photo and/or the user description. If the photo shows packaging, a carton, a label, or the food/drink is not directly visible but the user description specifies what it is (e.g. 'Milk 200ml'), estimate the food/drink using the user description. Never return an empty items array if food/drink details are present in the user description. If absolutely no food can be identified in either the photo or description, return a single item with 0 calories named 'Unrecognized' with a low confidence (0.05) and explain this in the assumptions, so that schema validation does not fail. Confidence must be a decimal from 0.05 to 1, not a 1-10 score. If portion grams are provided, use them and do not ask for grams again. If the user says oily, fried, not oily, grilled, baked, or similar, use that and do not ask about oil/frying again. Only include one follow-up question for genuinely missing details that would materially change the estimate. Do not shame the user.",
@@ -176,8 +173,61 @@ async function estimateMeal({
     return normalizeMealEstimate(output, { description, portionGrams });
   } catch (caught) {
     console.error("Meal analysis failed", caught);
-    throw new Error(
-      "Gemini could not return a valid calorie estimate. The meal was not saved; add any missing food details and try again."
+    throw getClientSafeMealAnalysisError(caught);
+  }
+}
+
+function getClientSafeMealAnalysisError(caught: unknown) {
+  if (caught instanceof ConvexError) {
+    return caught;
+  }
+
+  if (APICallError.isInstance(caught)) {
+    if (caught.statusCode === 429) {
+      return new ConvexError(
+        "Gemini is rate-limiting photo analysis right now. Wait a minute, then try the next meal again."
+      );
+    }
+
+    if (caught.statusCode && caught.statusCode >= 500) {
+      return new ConvexError(
+        "Gemini is temporarily unavailable. The meal was not saved; try again shortly."
+      );
+    }
+  }
+
+  if (NoObjectGeneratedError.isInstance(caught)) {
+    return new ConvexError(
+      "Gemini returned an incomplete calorie estimate. Add a short food detail and try again."
+    );
+  }
+
+  return new ConvexError(
+    "Gemini could not return a valid calorie estimate. The meal was not saved; add any missing food details and try again."
+  );
+}
+
+function validateMealRequest({
+  description,
+  portionGrams,
+}: {
+  description?: string;
+  portionGrams?: number;
+}) {
+  if (
+    typeof portionGrams === "number" &&
+    (!Number.isFinite(portionGrams) ||
+      portionGrams <= 0 ||
+      portionGrams > MAX_REASONABLE_PORTION_GRAMS)
+  ) {
+    throw new ConvexError(
+      `Approx grams must be between 1 and ${MAX_REASONABLE_PORTION_GRAMS}. Use food or drink weight only.`
+    );
+  }
+
+  if (description && NON_FOOD_DESCRIPTION_PATTERN.test(description)) {
+    throw new ConvexError(
+      "This does not look like a food or drink entry. Upload a meal photo and describe only edible items."
     );
   }
 }
@@ -186,10 +236,29 @@ function normalizeMealEstimate(
   estimate: MealEstimate,
   context: { description?: string; portionGrams?: number }
 ): SavedMealEstimate {
+  const normalizedItems = estimate.items.map(normalizeMealItem);
+  const totalCalories = normalizedItems.reduce(
+    (sum, item) => sum + item.calories,
+    0
+  );
+  const looksUnrecognized =
+    estimate.foodName.trim().toLowerCase() === "unrecognized" ||
+    normalizedItems.every(
+      (item) =>
+        item.calories <= 0 ||
+        item.name.trim().toLowerCase() === "unrecognized"
+    );
+
+  if (totalCalories <= 0 || looksUnrecognized) {
+    throw new ConvexError(
+      "I could not identify food or drink in that photo. Try another meal photo or add edible food details."
+    );
+  }
+
   return {
     ...estimate,
     confidence: normalizeConfidence(estimate.confidence),
-    items: estimate.items.map(normalizeMealItem),
+    items: normalizedItems,
     followUpQuestion: refineFollowUpQuestion(
       estimate.followUpQuestion ?? undefined,
       context
@@ -220,42 +289,6 @@ function normalizeMealItem(item: {
     fatGrams: item.fatGrams ?? undefined,
     portionGrams: item.portionGrams ?? undefined,
   };
-}
-
-function summarizeMealEstimate(estimate: SavedMealEstimate) {
-  return {
-    ...summarizeMealItems(estimate.items),
-    foodName: estimate.foodName,
-    items: estimate.items.map(normalizeMealItem),
-  };
-}
-
-function summarizeMealItems(items: SavedMealItem[]) {
-  const normalizedItems = items.map(normalizeMealItem);
-  const calories = normalizedItems.reduce((total, item) => total + item.calories, 0);
-  const proteinGrams = sumOptionalMacro(normalizedItems, "proteinGrams");
-  const carbsGrams = sumOptionalMacro(normalizedItems, "carbsGrams");
-  const fatGrams = sumOptionalMacro(normalizedItems, "fatGrams");
-
-  return {
-    foodName:
-      normalizedItems.length > 1
-        ? `${normalizedItems[0]?.name ?? "Meal"} + ${normalizedItems.length - 1}`
-        : normalizedItems[0]?.name ?? "Meal",
-    calories,
-    proteinGrams,
-    carbsGrams,
-    fatGrams,
-  };
-}
-
-function sumOptionalMacro(
-  items: SavedMealItem[],
-  key: "proteinGrams" | "carbsGrams" | "fatGrams"
-) {
-  const total = items.reduce((sum, item) => sum + (item[key] ?? 0), 0);
-
-  return total > 0 ? total : undefined;
 }
 
 function refineFollowUpQuestion(

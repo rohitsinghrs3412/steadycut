@@ -71,6 +71,10 @@ type WorkspaceFocus = "meal" | "scale" | "all";
 
 type AnalyzeStatus = "idle" | "uploading" | "analyzing" | "done" | "error";
 
+const MAX_REASONABLE_PORTION_GRAMS = 5000;
+const NON_FOOD_DESCRIPTION_PATTERN =
+  /\b(human|human being|person|people|man|woman|boy|girl|child|face|selfie|body)\b/i;
+
 export function PhotoCapturePicker({
   compact = false,
   emptyDescription,
@@ -362,6 +366,7 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
     const selectionId = fileSelectionRef.current + 1;
     fileSelectionRef.current = selectionId;
     clearPreviewUrl(previewUrlRef);
+    setError(null);
     setFile(null);
     setPreviewUrl(null);
 
@@ -370,6 +375,9 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
       return;
     }
 
+    setLatest(null);
+    setConfirmMeal(null);
+    setFollowUpAnswer("");
     setIsPreparingPhoto(true);
 
     try {
@@ -403,28 +411,46 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
       return;
     }
 
+    const parsedPortionGrams = parseMealPortionGrams(portionGrams);
+    const combinedDescription = [
+      description.trim(),
+      followUpAnswer.trim()
+        ? `Follow-up answer: ${followUpAnswer.trim()}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const inputError = getMealInputError({
+      description: combinedDescription,
+      portionGramsField: portionGrams,
+      portionGrams: parsedPortionGrams,
+    });
+
+    if (inputError) {
+      setError(inputError);
+      setStatus("error");
+      return;
+    }
+
     setError(null);
+    if (file) {
+      setLatest(null);
+    }
     setStatus(file ? "uploading" : "analyzing");
+
+    let placeholderMealLogId: Id<"mealLogs"> | undefined;
 
     try {
       const photoId = file
         ? await uploadToConvex(file, generateUploadUrl)
         : (latest?.photoId as Id<"_storage">);
-      const combinedDescription = [
-        description.trim(),
-        followUpAnswer.trim()
-          ? `Follow-up answer: ${followUpAnswer.trim()}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-      const placeholderMealLogId = file
+      placeholderMealLogId = file
         ? await savePlaceholderMutation({
             date,
             mealType,
             photoId,
             description: combinedDescription || undefined,
-            portionGrams: parsePositiveNumber(portionGrams),
+            portionGrams: parsedPortionGrams,
           })
         : undefined;
 
@@ -434,7 +460,7 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
         mealType,
         photoId,
         description: combinedDescription || undefined,
-        portionGrams: parsePositiveNumber(portionGrams),
+        portionGrams: parsedPortionGrams,
         placeholderMealLogId,
         existingMealLogId: file
           ? undefined
@@ -450,7 +476,15 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
       }
       setStatus("done");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Meal analysis failed.");
+      if (placeholderMealLogId) {
+        try {
+          await deleteMealLog({ id: placeholderMealLogId });
+        } catch {
+          // The action may have already removed the placeholder.
+        }
+      }
+
+      setError(getErrorMessage(caught, "Meal analysis failed."));
       setStatus("error");
     }
   }
@@ -1395,10 +1429,40 @@ function formatMacro(value?: number) {
   return value == null ? "--" : `${Math.round(value)} g`;
 }
 
-function parsePositiveNumber(value: string) {
+function parseMealPortionGrams(value: string) {
+  if (!value.trim()) {
+    return undefined;
+  }
+
   const parsed = Number(value);
 
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getMealInputError({
+  description,
+  portionGrams,
+  portionGramsField,
+}: {
+  description: string;
+  portionGrams?: number;
+  portionGramsField: string;
+}) {
+  if (portionGramsField.trim()) {
+    if (
+      typeof portionGrams !== "number" ||
+      portionGrams <= 0 ||
+      portionGrams > MAX_REASONABLE_PORTION_GRAMS
+    ) {
+      return `Approx grams must be between 1 and ${MAX_REASONABLE_PORTION_GRAMS}. Use food or drink weight only.`;
+    }
+  }
+
+  if (NON_FOOD_DESCRIPTION_PATTERN.test(description)) {
+    return "This does not look like a food or drink entry. Upload a meal photo and describe only edible items.";
+  }
+
+  return null;
 }
 
 function fieldToNumber(value: string) {
@@ -1409,6 +1473,19 @@ function fieldToNumber(value: string) {
 
 function numberToField(value?: number) {
   return value == null ? "" : String(Math.round(value));
+}
+
+function getErrorMessage(caught: unknown, fallback: string) {
+  if (
+    caught &&
+    typeof caught === "object" &&
+    "data" in caught &&
+    typeof caught.data === "string"
+  ) {
+    return caught.data;
+  }
+
+  return caught instanceof Error ? caught.message : fallback;
 }
 
 async function uploadToConvex(

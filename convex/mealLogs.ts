@@ -187,6 +187,20 @@ export const deleteMealLog = mutation({
   },
 });
 
+export const deleteMealLogForUser = internalMutation({
+  args: {
+    id: v.id("mealLogs"),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+
+    if (existing && existing.userId === args.userId) {
+      await ctx.db.delete(args.id);
+    }
+  },
+});
+
 export const migrateSingleItemMealLogs = mutation({
   args: {},
   handler: async (ctx) => {
