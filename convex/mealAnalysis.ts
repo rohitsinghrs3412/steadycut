@@ -148,7 +148,7 @@ async function estimateMeal({
       model: google("gemini-2.5-flash"),
       output: Output.object({ schema: mealEstimateSchema }),
       system:
-        "You estimate calories from food photos for a private Indian user. Return careful estimates, not medical advice. Consider common Indian foods, oil/ghee, sauces, fried items, rice/roti portions, and visible serving size. Always make the best reasonable estimate from the photo and provided text. Confidence must be a decimal from 0.05 to 1, not a 1-10 score. If portion grams are provided, use them and do not ask for grams again. If the user says oily, fried, not oily, grilled, baked, or similar, use that and do not ask about oil/frying again. Only include one follow-up question for genuinely missing details that would materially change the estimate. Do not shame the user.",
+        "You estimate calories from food photos for a private Indian user. Return careful estimates, not medical advice. Consider common Indian foods, oil/ghee, sauces, fried items, rice/roti portions, and visible serving size. Always make the best reasonable estimate from the photo and/or the user description. If the photo shows packaging, a carton, a label, or the food/drink is not directly visible but the user description specifies what it is (e.g. 'Milk 200ml'), estimate the food/drink using the user description. Never return an empty items array if food/drink details are present in the user description. If absolutely no food can be identified in either the photo or description, return a single item with 0 calories named 'Unrecognized' with a low confidence (0.05) and explain this in the assumptions, so that schema validation does not fail. Confidence must be a decimal from 0.05 to 1, not a 1-10 score. If portion grams are provided, use them and do not ask for grams again. If the user says oily, fried, not oily, grilled, baked, or similar, use that and do not ask about oil/frying again. Only include one follow-up question for genuinely missing details that would materially change the estimate. Do not shame the user.",
       messages: [
         {
           role: "user",
@@ -160,7 +160,7 @@ async function estimateMeal({
                 `User description: ${description?.trim() || "not provided"}`,
                 `Portion grams: ${portionGrams ?? "not provided"}`,
                 "Estimate total calories and macros for the full meal. Prefer kg/grams units. Keep assumptions concrete and include supplied grams/oil details in the assumptions when relevant.",
-                "Split visible foods into separate items whenever useful, such as rice, dal, paneer, roti, sabzi, chutney, dessert, or drink. Return item calories and macros; the server will sum totals.",
+                "Split foods into separate items whenever useful, such as rice, dal, paneer, roti, sabzi, chutney, dessert, or drink. If the food packaging or carton is pictured, use the user's description (e.g. 'Milk 200ml') to estimate the item(s). Return item calories and macros; the server will sum totals.",
               ].join("\n"),
             },
             {
