@@ -238,8 +238,11 @@ export function formatShortDate(dateKey: string) {
 export function createDemoDashboardData(today = toDateKey()): DashboardData {
   const habitIds = DEFAULT_HABITS.map((habit) => habit.id);
   const weights = [
+    80.5, 80.2, 80.4, 79.9, 79.7, 79.8, 79.5, 79.2, 79.4, 79.1, 78.8,
+    79.0, 78.6, 78.5, 78.7, 78.3, 78.0, 78.2, 77.9, 77.6, 77.8, 77.5,
     77.2, 77.0, 76.7, 76.6, 76.4, 76.5, 76.2, 75.8, 75.7, 75.5, 75.7,
-    75.3, 75.2, 75.4, 75.2, 75.1, 74.9, 75.1, 74.9, 74.8, 74.9,
+    75.3, 75.2, 75.4, 75.2, 75.1, 74.9, 75.1, 74.9, 74.8, 74.9, 74.6,
+    74.4, 74.5, 74.2, 73.9, 74.1, 73.8
   ];
   const notes = [
     "Felt good. Solid workout.",
@@ -391,7 +394,7 @@ export function getDashboardStats(data: DashboardData, today = toDateKey()) {
     checkInsThisWeek,
     checkInsThisMonth,
     weightTrend,
-    trendData: weightTrend.points.slice(-30).map((point) => ({
+    trendData: weightTrend.points.map((point) => ({
       date: point.date,
       label: formatShortDate(point.date),
       weight: point.weight,
@@ -404,13 +407,22 @@ export function getEwmaWeightTrend(checkIns: CheckIn[], windowDays = 7) {
   const sortedCheckIns = getSortedCheckIns(checkIns);
   const alpha = 2 / (windowDays + 1);
   let previousTrend: number | null = null;
+  let previousDate: string | null = null;
   const points = sortedCheckIns.map((checkIn) => {
+    let adjustedAlpha = alpha;
+    if (previousTrend !== null && previousDate !== null) {
+      const d = daysBetween(previousDate, checkIn.date);
+      const days = Math.max(1, d);
+      adjustedAlpha = 1 - Math.pow(1 - alpha, days);
+    }
+
     const trendWeight =
       previousTrend == null
         ? checkIn.weight
-        : alpha * checkIn.weight + (1 - alpha) * previousTrend;
+        : adjustedAlpha * checkIn.weight + (1 - adjustedAlpha) * previousTrend;
 
     previousTrend = trendWeight;
+    previousDate = checkIn.date;
 
     return {
       date: checkIn.date,

@@ -53,12 +53,37 @@ export const saveScaleLog = internalMutation({
   },
   handler: async (ctx, args) => {
     const createdAt = Date.now();
+    
+    let needsManualReview = args.needsManualReview;
+    let finalNote = args.note;
+    if (args.weightKg && !needsManualReview) {
+      const lastLogs = await ctx.db
+        .query("scaleLogs")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .order("desc")
+        .take(1);
+      
+      if (lastLogs.length > 0 && lastLogs[0].weightKg) {
+        const prevWeight = lastLogs[0].weightKg;
+        const diff = Math.abs(args.weightKg - prevWeight);
+        const percentDiff = (diff / prevWeight) * 100;
+        
+        if (percentDiff > 5 || diff > 4) {
+          needsManualReview = true;
+          const warning = `Flagged for high variance: fluctuation of ${diff.toFixed(1)} kg (${percentDiff.toFixed(1)}%) from previous weight of ${prevWeight.toFixed(1)} kg.`;
+          finalNote = finalNote ? `${finalNote} (${warning})` : warning;
+        }
+      }
+    }
+
     const id = await ctx.db.insert("scaleLogs", {
       ...args,
+      needsManualReview,
+      note: finalNote,
       createdAt,
     });
 
-    if (args.weightKg) {
+    if (args.weightKg && !needsManualReview) {
       const existingCheckIn = await ctx.db
         .query("checkIns")
         .withIndex("by_user_date", (q) =>
@@ -92,6 +117,8 @@ export const saveScaleLog = internalMutation({
     return {
       id,
       ...args,
+      needsManualReview,
+      note: finalNote,
       createdAt,
       photoUrl: await ctx.storage.getUrl(args.photoId),
     };

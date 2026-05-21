@@ -35,6 +35,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   XAxis,
   YAxis,
 } from "recharts";
@@ -130,6 +131,10 @@ const chartConfig = {
   trendWeight: {
     label: "7-day trend",
     color: "var(--primary)",
+  },
+  targetWeight: {
+    label: "Target",
+    color: "var(--chart-4)",
   },
 } satisfies ChartConfig;
 
@@ -230,6 +235,7 @@ export function DashboardScreen({
               latestTrendWeight={stats.weightTrend.latestTrendWeight}
               trendData={stats.trendData}
               weeklySpeed={stats.weightTrend.weeklySpeed}
+              targetWeight={data.profile?.targetWeightKg}
             />
             <HabitsCard
               activeHabits={stats.activeHabits}
@@ -269,6 +275,7 @@ export function DashboardScreen({
                   latestTrendWeight={stats.weightTrend.latestTrendWeight}
                   trendData={stats.trendData}
                   weeklySpeed={stats.weightTrend.weeklySpeed}
+                  targetWeight={data.profile?.targetWeightKg}
                 />
                 <ConsistencyCard
                   activeHabitsCount={stats.activeHabits.length}
@@ -742,6 +749,7 @@ function WeightTrendCard({
   latestTrendWeight,
   trendData,
   weeklySpeed,
+  targetWeight,
 }: {
   compact?: boolean;
   delta: number;
@@ -754,7 +762,38 @@ function WeightTrendCard({
     trendWeight: number;
   }>;
   weeklySpeed: number | null;
+  targetWeight?: number;
 }) {
+  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("30d");
+
+  const filteredData = useMemo(() => {
+    if (range === "all") return trendData;
+    if (trendData.length === 0) return trendData;
+
+    const latestDateStr = trendData[trendData.length - 1].date;
+    const latestDate = new Date(`${latestDateStr}T12:00:00`);
+    const daysLimit = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+
+    return trendData.filter((point) => {
+      const pointDate = new Date(`${point.date}T12:00:00`);
+      const diffTime = latestDate.getTime() - pointDate.getTime();
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+      return diffDays < daysLimit;
+    });
+  }, [trendData, range]);
+
+  const yDomain = useMemo(() => {
+    if (filteredData.length === 0) return ["auto", "auto"];
+    const weights = filteredData.flatMap((d) => [d.weight, d.trendWeight]);
+    let min = Math.min(...weights);
+    let max = Math.max(...weights);
+    if (targetWeight) {
+      min = Math.min(min, targetWeight);
+      max = Math.max(max, targetWeight);
+    }
+    return [Math.floor(min - 1.5), Math.ceil(max + 1.5)];
+  }, [filteredData, targetWeight]);
+
   return (
     <Card size={compact ? "sm" : "default"} className="glass-card transition-all duration-300">
       <CardHeader className="flex-row items-start justify-between pb-2">
@@ -770,15 +809,33 @@ function WeightTrendCard({
           </div>
           <p className="text-sm text-muted-foreground">7-day EWMA</p>
         </div>
-        <div className="text-right">
-          <Badge variant="secondary">30 days</Badge>
-          <div className="mt-4 flex items-center justify-end gap-2 font-medium text-primary">
-            <TrendingDown />
-            <span>{formatWeeklyTrendSpeed(weeklySpeed)}</span>
+        <div className="text-right flex flex-col items-end gap-3">
+          <div className="flex items-center gap-1 rounded-md bg-muted/60 p-0.5 border border-border/40">
+            {(["7d", "30d", "90d", "all"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-all duration-200",
+                  range === r
+                    ? "bg-background text-foreground shadow-sm scale-105"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                )}
+              >
+                {r === "all" ? "All" : r.toUpperCase()}
+              </button>
+            ))}
           </div>
-          <p className="text-sm text-muted-foreground">
-            {latest ? `${Math.abs(delta).toFixed(1)} kg raw move` : "No logs"}
-          </p>
+          <div>
+            <div className="flex items-center justify-end gap-2 font-medium text-primary">
+              <TrendingDown />
+              <span>{formatWeeklyTrendSpeed(weeklySpeed)}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {latest ? `${Math.abs(delta).toFixed(1)} kg raw move` : "No logs"}
+            </p>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -789,7 +846,7 @@ function WeightTrendCard({
           )}
           config={chartConfig}
         >
-          <AreaChart data={trendData} margin={{ left: 0, right: 8 }}>
+          <AreaChart data={filteredData} margin={{ left: 0, right: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
               axisLine={false}
@@ -799,7 +856,7 @@ function WeightTrendCard({
             />
             <YAxis
               axisLine={false}
-              domain={["dataMin - 2", "dataMax + 2"]}
+              domain={yDomain}
               tickLine={false}
               tickFormatter={(value) => `${Math.round(Number(value))}`}
               tickMargin={10}
@@ -822,6 +879,22 @@ function WeightTrendCard({
               strokeWidth={3}
               type="monotone"
             />
+            {targetWeight && (
+              <ReferenceLine
+                y={targetWeight}
+                stroke="var(--color-targetWeight)"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{
+                  value: `Target: ${targetWeight} kg`,
+                  position: "insideBottomRight",
+                  fill: "var(--muted-foreground)",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  offset: 8,
+                }}
+              />
+            )}
           </AreaChart>
         </ChartContainer>
       </CardContent>
