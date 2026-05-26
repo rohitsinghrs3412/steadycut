@@ -117,36 +117,50 @@ export function ProfileSettingsPanel({
         <Settings className="text-primary" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="grid gap-3 min-[380px]:grid-cols-3">
-          <div className="rounded-lg border p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Calculator />
-              BMI
+        <div className="grid gap-3 grid-cols-3">
+          <div className="flex flex-col justify-between rounded-lg border p-3 bg-card/40">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Calculator className="size-3.5" />
+                BMI
+              </div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight">
+                {bmi ? bmi.toFixed(1) : "--"}
+              </div>
             </div>
-            <div className="mt-2 text-2xl font-semibold">
-              {bmi ? bmi.toFixed(1) : "--"}
-            </div>
-            <Badge className="mt-2 max-w-full truncate" variant="secondary">
-              {getBmiSummary(bmi, ancestry)}
-            </Badge>
+            {bmi ? (
+              <Badge 
+                className="mt-2 w-full justify-center text-[10px] px-1 truncate" 
+                variant="secondary"
+                title={getBmiSummary(bmi, ancestry)}
+              >
+                {getBmiSummary(bmi, ancestry)}
+              </Badge>
+            ) : (
+              <div className="mt-1 text-xs text-muted-foreground">kg/m²</div>
+            )}
           </div>
-          <div className="rounded-lg border p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Scale />
-              Weight
-            </div>
-            <div className="mt-2 text-2xl font-semibold">
-              {parsedWeight ? parsedWeight.toFixed(1) : "--"}
+          <div className="flex flex-col justify-between rounded-lg border p-3 bg-card/40">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Scale className="size-3.5" />
+                Weight
+              </div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight">
+                {parsedWeight ? parsedWeight.toFixed(1) : "--"}
+              </div>
             </div>
             <div className="mt-1 text-xs text-muted-foreground">kg</div>
           </div>
-          <div className="rounded-lg border p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Ruler />
-              Height
-            </div>
-            <div className="mt-2 text-2xl font-semibold">
-              {parsedHeight ? Math.round(parsedHeight) : "--"}
+          <div className="flex flex-col justify-between rounded-lg border p-3 bg-card/40">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Ruler className="size-3.5" />
+                Height
+              </div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight">
+                {parsedHeight ? Math.round(parsedHeight) : "--"}
+              </div>
             </div>
             <div className="mt-1 text-xs text-muted-foreground">cm</div>
           </div>
