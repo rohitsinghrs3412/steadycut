@@ -54,7 +54,7 @@ export function MobileNavButton({ streak = 0 }: { streak?: number }) {
           <span className="sr-only">Open navigation</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-72 p-0">
+      <SheetContent side="left" className="w-72 p-0 glass-card bg-transparent border-r border-white/10 dark:border-white/5 rounded-r-2xl">
         <SheetHeader>
           <SheetTitle className="sr-only">SteadyCut navigation</SheetTitle>
         </SheetHeader>
