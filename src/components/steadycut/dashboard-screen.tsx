@@ -7,28 +7,23 @@ import {
   Camera,
   Check,
   ChevronRight,
-  Dumbbell,
-  Footprints,
+  Droplet,
   Flame,
   MessageCircle,
   MoreVertical,
   Pencil,
-  Plus,
   Settings,
   Smile,
   Sparkles,
   Target,
   TrendingDown,
-  Utensils,
   Waves,
 } from "lucide-react";
 import Link from "next/link";
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type MutableRefObject,
 } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import {
@@ -48,9 +43,13 @@ import {
   MobileNavButton,
 } from "@/components/steadycut/app-sidebar";
 import {
-  PhotoCapturePicker,
   PhotoLoggingWorkspace,
 } from "@/components/steadycut/photo-logging-workspace";
+import { DemoCaloriePhotoCard } from "@/components/steadycut/demo-calorie-photo-card";
+import {
+  habitColorClass,
+  habitIcons,
+} from "@/components/steadycut/habit-presentation";
 import { ThemeIconButton } from "@/components/steadycut/theme-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,6 +79,14 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   Table,
   TableBody,
   TableCell,
@@ -94,11 +101,13 @@ import {
   CoachMessage,
   DashboardData,
   formatDisplayDate,
+  formatHydrationVolume,
+  formatWeeklyTrendSpeed,
   getCalorieStats,
   getDashboardStats,
+  getHydrationStats,
   getPreviousWeightChange,
   Habit,
-  HabitIconKey,
   moodOptions,
   Mood,
   toDateKey,
@@ -138,20 +147,6 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
-const habitIcons: Record<HabitIconKey, typeof Utensils> = {
-  utensils: Utensils,
-  dumbbell: Dumbbell,
-  droplet: Waves,
-  footprints: Footprints,
-};
-
-const habitColorClass: Record<Habit["color"], string> = {
-  green: "bg-primary text-primary-foreground",
-  blue: "bg-chart-1 text-white",
-  amber: "bg-chart-3 text-foreground",
-  violet: "bg-chart-5 text-white",
-};
-
 const moodIcon: Record<Mood, typeof Smile> = {
   great: Smile,
   good: Smile,
@@ -170,6 +165,10 @@ export function DashboardScreen({
   const stats = useMemo(() => getDashboardStats(data, today), [data, today]);
   const calorieStats = useMemo(
     () => getCalorieStats(data, today, data.profile?.targetCalories ?? 1800),
+    [data, today]
+  );
+  const hydrationStats = useMemo(
+    () => getHydrationStats(data, today),
     [data, today]
   );
   const [generatedCoachMessage, setGeneratedCoachMessage] =
@@ -203,11 +202,11 @@ export function DashboardScreen({
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background text-foreground lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
       <DesktopAppSidebar streak={stats.streak} />
       <div className="flex min-w-0 flex-col">
         <TopBar mode={mode} today={today} streak={stats.streak} />
-        <main className="flex w-full max-w-full flex-col gap-4 overflow-x-hidden p-3 pb-[calc(9rem+env(safe-area-inset-bottom))] min-[390px]:px-4 min-[390px]:pt-4 lg:p-5 lg:pb-5">
+        <main className="mx-auto w-full max-w-7xl flex-1 flex flex-col gap-6 p-3 pb-[calc(9rem+env(safe-area-inset-bottom))] min-[390px]:px-4 min-[390px]:pt-4 lg:px-8 lg:py-8 lg:pb-12">
           <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden lg:hidden">
             {missingItems.length > 0 ? (
               <SetupInlineNotice mode={mode} missingItems={missingItems} />
@@ -216,6 +215,11 @@ export function DashboardScreen({
               compact
               stats={calorieStats}
               streak={stats.streak}
+            />
+            <HydrationBubbleWidget
+              compact
+              mode={mode}
+              stats={hydrationStats}
             />
             {mode === "live" ? (
               <PhotoLoggingWorkspace compact focus="meal" />
@@ -244,31 +248,20 @@ export function DashboardScreen({
             />
           </div>
 
-          <div className="hidden flex-col gap-4 lg:flex">
+          <div className="hidden flex-col gap-6 lg:flex">
             {missingItems.length > 0 ? (
               <SetupInlineNotice mode={mode} missingItems={missingItems} />
             ) : null}
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-              <div className="min-w-0">
+            
+            <div className="hidden gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_380px] lg:flex lg:flex-col">
+              {/* Left Column (Wide panels) */}
+              <div className="flex flex-col gap-6 min-w-0">
                 {mode === "live" ? (
                   <PhotoLoggingWorkspace focus="meal" />
                 ) : (
                   <DemoCaloriePhotoCard />
                 )}
-              </div>
-              <div className="flex flex-col gap-4">
-                <CalorieStatusCard stats={calorieStats} streak={stats.streak} />
-                <TodayCheckInCard
-                  activeHabits={stats.activeHabits}
-                  latestWeight={stats.latest?.weight ?? 75}
-                  onSaveCheckIn={onSaveCheckIn}
-                  todayCheckIn={stats.todayCheckIn}
-                />
-              </div>
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-              <div className="flex flex-col gap-4">
+                
                 <WeightTrendCard
                   delta={stats.delta}
                   latest={stats.latest}
@@ -277,6 +270,7 @@ export function DashboardScreen({
                   weeklySpeed={stats.weightTrend.weeklySpeed}
                   targetWeight={data.profile?.targetWeightKg}
                 />
+                
                 <ConsistencyCard
                   activeHabitsCount={stats.activeHabits.length}
                   checkInDateSet={stats.checkInDateSet}
@@ -285,6 +279,7 @@ export function DashboardScreen({
                   streak={stats.streak}
                   weekKeys={stats.weekKeys}
                 />
+                
                 <HabitsCard
                   activeHabits={stats.activeHabits}
                   completedHabitIds={stats.todayCheckIn?.completedHabitIds ?? []}
@@ -292,12 +287,23 @@ export function DashboardScreen({
                 />
               </div>
 
-              <DailyCoachCard
-                coachMessage={coachMessage}
-                isGenerating={isGeneratingCoach}
-                onGenerate={handleGenerateCoach}
-              />
-            </section>
+              {/* Right Column (Narrower card widgets) */}
+              <div className="flex flex-col gap-6">
+                <CalorieStatusCard stats={calorieStats} streak={stats.streak} />
+                <HydrationBubbleWidget mode={mode} stats={hydrationStats} />
+                <TodayCheckInCard
+                  activeHabits={stats.activeHabits}
+                  latestWeight={stats.latest?.weight ?? 75}
+                  onSaveCheckIn={onSaveCheckIn}
+                  todayCheckIn={stats.todayCheckIn}
+                />
+                <DailyCoachCard
+                  coachMessage={coachMessage}
+                  isGenerating={isGeneratingCoach}
+                  onGenerate={handleGenerateCoach}
+                />
+              </div>
+            </div>
 
             <RecentCheckInsCard
               activeHabitCount={stats.activeHabits.length}
@@ -320,37 +326,39 @@ function TopBar({
   streak: number;
 }) {
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-8 relative">
-      <div className="flex min-w-0 items-center gap-3">
-        <MobileNavButton streak={streak} />
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold">
-            <span>Today</span>
-          </h1>
-          <p className="hidden truncate text-sm text-muted-foreground md:block">
-            Add food, check calories left, then log the day.
-          </p>
+    <header className="sticky top-0 z-10 flex h-16 items-center border-b bg-background/95 px-4 backdrop-blur lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <MobileNavButton streak={streak} />
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold tracking-tight">
+              <span>Today</span>
+            </h1>
+            <p className="hidden truncate text-xs text-muted-foreground md:block mt-0.5">
+              Add food, check calories left, then log the day.
+            </p>
+          </div>
         </div>
-      </div>
-      <MobileHeaderLogo />
+        <MobileHeaderLogo />
 
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <div className="hidden items-center gap-2 md:flex">
-          <Calendar />
-          <span>{formatDisplayDate(today)}</span>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="hidden items-center gap-2 md:flex">
+            <Calendar className="size-4" />
+            <span>{formatDisplayDate(today)}</span>
+          </div>
+          <Separator className="hidden h-4 md:block" orientation="vertical" />
+          <div className="hidden items-center gap-2 font-medium text-chart-1 sm:flex">
+            <Sparkles className="size-4" />
+            <span>{mode === "live" ? "Live estimates" : "Preview mode"}</span>
+          </div>
+          <ThemeIconButton className="shrink-0" />
+          <Button asChild className="hidden lg:hidden" size="icon" variant="outline">
+            <Link href="/settings">
+              <Settings />
+              <span className="sr-only">Open settings</span>
+            </Link>
+          </Button>
         </div>
-        <Separator className="hidden h-6 md:block" orientation="vertical" />
-        <div className="hidden items-center gap-2 font-medium text-chart-1 sm:flex">
-          <Sparkles />
-          <span>{mode === "live" ? "Live estimates" : "Preview mode"}</span>
-        </div>
-        <ThemeIconButton className="shrink-0" />
-        <Button asChild className="hidden lg:hidden" size="icon" variant="outline">
-          <Link href="/settings">
-            <Settings />
-            <span className="sr-only">Open settings</span>
-          </Link>
-        </Button>
       </div>
     </header>
   );
@@ -473,78 +481,152 @@ function CalorieMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function DemoCaloriePhotoCard() {
-  const [fileName, setFileName] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
-  const [estimated, setEstimated] = useState(false);
-
-  useEffect(() => () => clearLocalPreviewUrl(previewUrlRef), []);
-
-  function handleDemoFileChange(nextFile: File | null) {
-    clearLocalPreviewUrl(previewUrlRef);
-    setFileName(nextFile?.name ?? "");
-    setEstimated(false);
-
-    if (nextFile) {
-      const nextPreviewUrl = URL.createObjectURL(nextFile);
-      previewUrlRef.current = nextPreviewUrl;
-      setPreviewUrl(nextPreviewUrl);
-    } else {
-      setPreviewUrl(null);
-    }
-  }
+function HydrationBubbleWidget({
+  compact = false,
+  mode,
+  stats,
+}: {
+  compact?: boolean;
+  mode: "demo" | "live";
+  stats: ReturnType<typeof getHydrationStats>;
+}) {
+  const fillPercent = stats.totalMl > 0 ? Math.max(stats.percent, 7) : 0;
+  const lastLogText = stats.latestLog
+    ? `${stats.latestLog.beverageName}, ${formatHydrationVolume(
+        stats.latestLog.volumeMl
+      )}`
+    : "No drinks logged";
 
   return (
-    <Card size="sm" className="glass-card transition-all duration-300">
-      <CardHeader className="flex-row items-start justify-between">
-        <div>
-          <CardTitle>Photo calories</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Try the first step of the loop in preview.
-          </p>
-        </div>
-        <Sparkles className="text-primary" />
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <PhotoCapturePicker
+    <Card
+      className={cn(
+        "relative min-w-0 overflow-hidden border-primary/20 glass-card transition-all duration-300",
+        compact && "bg-card/70"
+      )}
+      size={compact ? "sm" : "default"}
+    >
+      <CardContent
+        className={cn(
+          "relative grid items-center gap-4",
           compact
-          emptyDescription="Take a new photo or choose one from your gallery."
-          emptyTitle="Add meal photo"
-          previewAlt={fileName || "Meal preview"}
-          previewUrl={previewUrl}
-          onFileChange={handleDemoFileChange}
+            ? "grid-cols-[88px_minmax(0,1fr)] p-4"
+            : "grid-cols-[112px_minmax(0,1fr)] p-5"
+        )}
+      >
+        <HydrationOrb
+          fillPercent={fillPercent}
+          isComplete={stats.isTargetMet}
+          sizeClass={compact ? "size-20" : "size-24"}
         />
-        <Button className="h-10" onClick={() => setEstimated(true)}>
-          <Plus data-icon="inline-start" />
-          Estimate calories
-        </Button>
-        {estimated ? (
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm text-muted-foreground">Demo estimate</div>
-                <div className="text-lg font-semibold">Home meal plate</div>
+
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                <Droplet className="size-4" />
+                <span>Hydration</span>
               </div>
-              <Badge>540 kcal</Badge>
+              <div className="mt-1 flex items-end gap-1.5">
+                <span className="text-3xl font-semibold tracking-normal">
+                  {formatHydrationVolume(stats.totalMl)}
+                </span>
+                <span className="pb-1 text-xs font-medium text-muted-foreground">
+                  / {formatHydrationVolume(stats.targetMl)}
+                </span>
+              </div>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <CalorieMetric label="Protein" value="24g" />
-              <CalorieMetric label="Carbs" value="62g" />
-              <CalorieMetric label="Fat" value="18g" />
-            </div>
+            <Badge variant={stats.isTargetMet ? "default" : "secondary"}>
+              {Math.round(stats.percent)}%
+            </Badge>
           </div>
-        ) : null}
+
+          <Progress className="mt-3 h-1.5" value={stats.percent} />
+          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className="truncate">{lastLogText}</span>
+            <span className="shrink-0 font-medium text-primary">
+              {stats.isTargetMet
+                ? "Target hit"
+                : `${formatHydrationVolume(stats.remainingMl)} left`}
+            </span>
+          </div>
+
+          <div className="mt-4">
+            {mode === "live" ? (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button className="h-10 w-full" size="sm" type="button">
+                    <Camera data-icon="inline-start" />
+                    Add drink photo
+                  </Button>
+                </SheetTrigger>
+                <SheetContent
+                  className="max-h-[88svh] overflow-y-auto rounded-t-2xl p-0 glass-card bg-transparent border-t border-white/10 dark:border-white/5"
+                  side="bottom"
+                >
+                  <SheetHeader className="border-b pr-14">
+                    <SheetTitle>Hydration photo</SheetTitle>
+                    <SheetDescription>
+                      Estimate the ml from a bottle, glass, tumbler, or mug.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="p-4">
+                    <PhotoLoggingWorkspace
+                      compact
+                      focus="hydration"
+                      showRecentLogs={false}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            ) : (
+              <Button className="h-10 w-full" disabled size="sm" type="button">
+                <Camera data-icon="inline-start" />
+                Preview total
+              </Button>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function clearLocalPreviewUrl(ref: MutableRefObject<string | null>) {
-  if (ref.current) {
-    URL.revokeObjectURL(ref.current);
-    ref.current = null;
-  }
+function HydrationOrb({
+  fillPercent,
+  isComplete,
+  sizeClass,
+}: {
+  fillPercent: number;
+  isComplete: boolean;
+  sizeClass: string;
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "relative shrink-0 overflow-hidden rounded-full border bg-secondary shadow-inner",
+        "border-chart-1/30 dark:border-chart-1/40",
+        sizeClass
+      )}
+    >
+      <div
+        className="hydration-bubble-water absolute inset-x-0 bottom-0 transition-[height] duration-700 ease-out"
+        style={{ height: `${fillPercent}%` }}
+      >
+        <div className="hydration-wave hydration-wave-one" />
+        <div className="hydration-wave hydration-wave-two" />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Droplet
+          className={cn(
+            "size-8 drop-shadow-sm",
+            isComplete ? "text-primary-foreground" : "text-chart-1"
+          )}
+        />
+      </div>
+      <div className="absolute inset-1 rounded-full border border-white/40 dark:border-white/10" />
+    </div>
+  );
 }
 
 function TodayCheckInCard({
@@ -587,8 +669,8 @@ function TodayCheckInCard({
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-2 sm:col-span-2">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="flex flex-col gap-2 sm:col-span-2 xl:col-span-1">
               <Label htmlFor="weight">Weight (kg)</Label>
               <Input
                 id="weight"
@@ -902,16 +984,6 @@ function WeightTrendCard({
   );
 }
 
-function formatWeeklyTrendSpeed(value: number | null) {
-  if (value == null) {
-    return "-- / wk";
-  }
-
-  const prefix = value <= 0 ? "-" : "+";
-
-  return `${prefix}${Math.abs(value).toFixed(2)} kg/wk`;
-}
-
 function ConsistencyCard({
   activeHabitsCount,
   checkInDateSet,
@@ -1013,7 +1085,7 @@ function DailyCoachCard({
   onGenerate: () => Promise<void>;
 }) {
   return (
-    <Card className="xl:min-h-full glass-card transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
+    <Card className="xl:flex-1 glass-card transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
       <CardHeader className="flex-row items-start justify-between">
         <CardTitle>Daily coach</CardTitle>
         <div className="flex items-center gap-2 text-sm font-medium text-chart-1">

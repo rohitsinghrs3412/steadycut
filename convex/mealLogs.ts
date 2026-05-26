@@ -14,6 +14,9 @@ type SavedMealItem = {
   portionGrams?: number;
 };
 
+const ESTIMATING_LOG_VISIBLE_MS = 2 * 60 * 1000;
+const STALE_ESTIMATING_LOG_DELETE_MS = 10 * 60 * 1000;
+
 export const listRecent = query({
   args: {
     limit: v.optional(v.number()),
@@ -29,7 +32,7 @@ export const listRecent = query({
 
     return await Promise.all(
       logs
-        .filter((log) => !isFailedMealEstimate(log))
+        .filter((log) => !isFailedMealEstimate(log, Date.now()))
         .slice(0, limit)
         .map(async (log) => ({
           id: log._id,
@@ -201,6 +204,29 @@ export const deleteMealLogForUser = internalMutation({
   },
 });
 
+export const deleteStaleEstimatingMealLogs = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const staleBefore = Date.now() - STALE_ESTIMATING_LOG_DELETE_MS;
+    const logs = await ctx.db
+      .query("mealLogs")
+      .withIndex("by_status", (q) => q.eq("status", "estimating"))
+      .collect();
+    let deleted = 0;
+
+    for (const log of logs) {
+      if (
+        Math.max(log.updatedAt, log.createdAt) < staleBefore
+      ) {
+        await ctx.db.delete(log._id);
+        deleted += 1;
+      }
+    }
+
+    return deleted;
+  },
+});
+
 export const migrateSingleItemMealLogs = mutation({
   args: {},
   handler: async (ctx) => {
@@ -347,7 +373,7 @@ function sumOptionalMacro(
   return total > 0 ? total : undefined;
 }
 
-function getMealItems(meal: {
+export function getMealItems(meal: {
   foodName: string;
   calories: number;
   proteinGrams?: number;
@@ -376,14 +402,17 @@ function getMealItems(meal: {
   ];
 }
 
-function isFailedMealEstimate(meal: {
+export function isFailedMealEstimate(meal: {
   foodName: string;
   calories: number;
   confidence: number;
   status?: "estimating" | "ready";
-}) {
+  createdAt: number;
+  updatedAt: number;
+}, now: number) {
   if (meal.status === "estimating") {
-    return false;
+    return now - Math.max(meal.updatedAt, meal.createdAt) >
+      ESTIMATING_LOG_VISIBLE_MS;
   }
 
   return (

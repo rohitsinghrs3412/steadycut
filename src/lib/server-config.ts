@@ -6,6 +6,12 @@ export const serverConfig = {
   geminiApiKey: (process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "").trim(),
   vapidPublicKey: (process.env.VAPID_PUBLIC_KEY ?? "").trim(),
   vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY ?? "").trim(),
+  allowedUserIds: parseCsvEnv(process.env.STEADYCUT_ALLOWED_USER_IDS),
+  allowedEmails: parseCsvEnv(process.env.STEADYCUT_ALLOWED_EMAILS).map((email) =>
+    email.toLowerCase()
+  ),
+  allowedOrgIds: parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_IDS),
+  allowedOrgRoles: parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_ROLES),
 };
 
 export const hasClerkServerConfig = Boolean(
@@ -16,12 +22,23 @@ export const hasConvexServerConfig = Boolean(
   serverConfig.convexUrl && serverConfig.clerkJwtIssuerDomain
 );
 
-export const shouldUseLiveServices =
+export const wantsLiveServices =
   process.env.NODE_ENV === "production" ||
   process.env.STEADYCUT_LIVE_MODE === "true";
 
+export const hasLiveServices = hasClerkServerConfig && hasConvexServerConfig;
+
+export const hasAppAuthorizationConfig = Boolean(
+  serverConfig.allowedUserIds.length ||
+    serverConfig.allowedEmails.length ||
+    serverConfig.allowedOrgIds.length
+);
+
 export const hasCoreServerConfig =
-  shouldUseLiveServices && hasClerkServerConfig && hasConvexServerConfig;
+  wantsLiveServices && hasLiveServices && hasAppAuthorizationConfig;
+
+export const isLiveModeMisconfigured =
+  wantsLiveServices && !hasCoreServerConfig;
 
 export function getMissingSetupItems() {
   const missingItems = [
@@ -36,9 +53,22 @@ export function getMissingSetupItems() {
     .filter(([, value]) => !value)
     .map(([name]) => name);
 
-  if (missingItems.length === 0 && !shouldUseLiveServices) {
+  if (!hasAppAuthorizationConfig) {
+    missingItems.push(
+      "STEADYCUT_ALLOWED_USER_IDS or STEADYCUT_ALLOWED_EMAILS or STEADYCUT_ALLOWED_ORG_IDS"
+    );
+  }
+
+  if (missingItems.length === 0 && !wantsLiveServices) {
     return ["STEADYCUT_LIVE_MODE=true"];
   }
 
   return missingItems;
+}
+
+function parseCsvEnv(value: string | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

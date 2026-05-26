@@ -1,6 +1,17 @@
-const CACHE_NAME = "steadycut-shell-v3";
+const CACHE_NAME = "steadycut-shell-v6";
 const NOTIFICATION_ICON = "/icon-192x192.png";
 const NOTIFICATION_BADGE = "/badge-96x96.png";
+const PRIVATE_NAVIGATION_PREFIXES = [
+  "/dashboard",
+  "/check-ins",
+  "/progress",
+  "/habits",
+  "/insights",
+  "/coach",
+  "/live-coach",
+  "/goals",
+  "/settings",
+];
 const APP_SHELL_URLS = [
   "/",
   "/offline",
@@ -47,12 +58,15 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request, "/offline"));
+    event.respondWith(
+      isPrivateNavigation(url.pathname)
+        ? networkOnly(request, "/offline")
+        : networkFirst(request, "/offline")
+    );
     return;
   }
 
   if (
-    url.pathname.startsWith("/_next/static/") ||
     url.pathname === "/icon.svg" ||
     url.pathname === "/maskable-icon.svg" ||
     url.pathname === "/apple-touch-icon.svg" ||
@@ -118,6 +132,15 @@ async function networkFirst(request, fallbackUrl) {
   }
 }
 
+async function networkOnly(request, fallbackUrl) {
+  try {
+    return await fetch(request);
+  } catch {
+    const cache = await caches.open(CACHE_NAME);
+    return await cache.match(fallbackUrl);
+  }
+}
+
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
@@ -132,4 +155,10 @@ async function staleWhileRevalidate(request) {
     .catch(() => cached);
 
   return cached || fetched;
+}
+
+function isPrivateNavigation(pathname) {
+  return PRIVATE_NAVIGATION_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
 }

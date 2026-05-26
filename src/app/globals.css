@@ -221,3 +221,40 @@
   }
 }
 
+.hydration-bubble-water {
+  background: linear-gradient(
+    180deg,
+    oklch(0.82 0.11 220),
+    oklch(0.61 0.18 248)
+  );
+}
+
+.hydration-wave {
+  position: absolute;
+  left: 50%;
+  top: -0.55rem;
+  width: 160%;
+  height: 1rem;
+  border-radius: 999px;
+  background: oklch(0.98 0.01 220 / 48%);
+  transform: translateX(-50%);
+}
+
+.hydration-wave-one {
+  animation: hydration-wave 4.8s ease-in-out infinite;
+}
+
+.hydration-wave-two {
+  opacity: 0.55;
+  animation: hydration-wave 6.4s ease-in-out infinite reverse;
+}
+
+@keyframes hydration-wave {
+  0%,
+  100% {
+    transform: translateX(-54%) translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(-46%) translateY(0.15rem) rotate(1.5deg);
+  }
+}

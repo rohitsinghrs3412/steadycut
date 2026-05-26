@@ -115,6 +115,20 @@ export type ScaleLog = {
   createdAt: number;
 };
 
+export type HydrationLog = {
+  id: string;
+  date: string;
+  photoId: string;
+  photoUrl?: string | null;
+  beverageName: string;
+  containerName: string;
+  volumeMl: number;
+  confidence: number;
+  assumptions: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type DashboardData = {
   profile?: UserProfile | null;
   habits: Habit[];
@@ -122,6 +136,7 @@ export type DashboardData = {
   coachMessage?: CoachMessage | null;
   mealLogs?: MealLog[];
   scaleLogs?: ScaleLog[];
+  hydrationLogs?: HydrationLog[];
 };
 
 export type CheckInInput = {
@@ -131,6 +146,12 @@ export type CheckInInput = {
   mood: Mood;
   completedHabitIds: string[];
 };
+
+export const MAX_REASONABLE_MEAL_PORTION_GRAMS = 5000;
+export const HYDRATION_TARGET_ML = 2000;
+
+const NON_FOOD_DESCRIPTION_PATTERN =
+  /\b(human|human being|person|people|man|woman|boy|girl|child|face|selfie|body)\b/i;
 
 export const DEFAULT_HABITS = [
   {
@@ -347,6 +368,47 @@ export function createDemoDashboardData(today = toDateKey()): DashboardData {
         updatedAt: Date.now() - 18_000_000,
       },
     ],
+    hydrationLogs: [
+      {
+        id: `demo-hydration-morning-${today}`,
+        date: today,
+        photoId: "demo-water-bottle",
+        beverageName: "Water",
+        containerName: "750 ml steel bottle",
+        volumeMl: 650,
+        confidence: 0.82,
+        assumptions: [
+          "Bottle appears mostly full with a small air gap.",
+          "Estimated from a common 750 ml bottle size.",
+        ],
+        createdAt: Date.now() - 20_000_000,
+        updatedAt: Date.now() - 20_000_000,
+      },
+      {
+        id: `demo-hydration-coffee-${today}`,
+        date: today,
+        photoId: "demo-coffee-mug",
+        beverageName: "Coffee",
+        containerName: "Ceramic mug",
+        volumeMl: 280,
+        confidence: 0.7,
+        assumptions: ["Mug looks close to a standard 300 ml serving."],
+        createdAt: Date.now() - 11_000_000,
+        updatedAt: Date.now() - 11_000_000,
+      },
+      {
+        id: `demo-hydration-evening-${today}`,
+        date: today,
+        photoId: "demo-glass-water",
+        beverageName: "Water",
+        containerName: "Tall glass",
+        volumeMl: 350,
+        confidence: 0.76,
+        assumptions: ["Glass appears nearly full."],
+        createdAt: Date.now() - 2_700_000,
+        updatedAt: Date.now() - 2_700_000,
+      },
+    ],
   };
 }
 
@@ -483,6 +545,151 @@ export function getCalorieStats(
     fat,
     isOnTrack: remaining >= 0,
   };
+}
+
+export function getHydrationStats(
+  data: DashboardData,
+  today = toDateKey(),
+  targetMl = HYDRATION_TARGET_ML
+) {
+  const todaysLogs = (data.hydrationLogs ?? []).filter(
+    (log) => log.date === today
+  );
+  const totalMl = todaysLogs.reduce((total, log) => total + log.volumeMl, 0);
+  const percent = targetMl > 0 ? Math.min((totalMl / targetMl) * 100, 100) : 0;
+  const remainingMl = Math.max(targetMl - totalMl, 0);
+  const latestLog = [...todaysLogs].sort((a, b) => b.createdAt - a.createdAt)[0];
+
+  return {
+    todaysLogs,
+    totalMl,
+    targetMl,
+    remainingMl,
+    percent,
+    latestLog,
+    isTargetMet: totalMl >= targetMl,
+  };
+}
+
+export function formatHydrationVolume(valueMl: number) {
+  if (valueMl >= 1000) {
+    const liters = valueMl / 1000;
+    return `${Number.isInteger(liters) ? liters.toFixed(0) : liters.toFixed(1)}L`;
+  }
+
+  return `${Math.round(valueMl)} ml`;
+}
+
+export function getFallbackMealItems(meal: MealLog): MealItem[] {
+  return [
+    {
+      name: meal.foodName,
+      calories: meal.calories,
+      proteinGrams: meal.proteinGrams,
+      carbsGrams: meal.carbsGrams,
+      fatGrams: meal.fatGrams,
+      portionGrams: meal.portionGrams,
+    },
+  ];
+}
+
+export function parseMealPortionGrams(value: string) {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function getMealInputError({
+  description,
+  portionGrams,
+  portionGramsField,
+}: {
+  description: string;
+  portionGrams?: number;
+  portionGramsField: string;
+}) {
+  if (portionGramsField.trim()) {
+    if (
+      typeof portionGrams !== "number" ||
+      portionGrams <= 0 ||
+      portionGrams > MAX_REASONABLE_MEAL_PORTION_GRAMS
+    ) {
+      return `Approx grams must be between 1 and ${MAX_REASONABLE_MEAL_PORTION_GRAMS}. Use food or drink weight only.`;
+    }
+  }
+
+  if (NON_FOOD_DESCRIPTION_PATTERN.test(description)) {
+    return "This does not look like a food or drink entry. Upload a meal photo and describe only edible items.";
+  }
+
+  return null;
+}
+
+export function formatWeight(weight?: number) {
+  return weight == null ? "--" : `${weight.toFixed(1)} kg`;
+}
+
+export function formatWeeklyTrendSpeed(value: number | null, suffix = "") {
+  if (value == null) {
+    return "-- / wk";
+  }
+
+  const prefix = value <= 0 ? "-" : "+";
+
+  return `${prefix}${Math.abs(value).toFixed(2)} kg/wk${suffix}`;
+}
+
+export function getWeightGoalProgress(
+  startWeight?: number,
+  currentWeight?: number,
+  targetWeight?: number
+) {
+  if (startWeight == null || currentWeight == null || targetWeight == null) {
+    return null;
+  }
+
+  const totalDistance = startWeight - targetWeight;
+
+  if (totalDistance <= 0) {
+    return currentWeight <= targetWeight ? 100 : 0;
+  }
+
+  return Math.max(
+    0,
+    Math.min(((startWeight - currentWeight) / totalDistance) * 100, 100)
+  );
+}
+
+export function getWeightGoalSummary(
+  startWeight?: number,
+  currentWeight?: number,
+  targetWeight?: number
+) {
+  if (targetWeight == null) {
+    return "Set a goal weight in settings.";
+  }
+
+  if (currentWeight == null || startWeight == null) {
+    return "Log a weight check-in to start progress tracking.";
+  }
+
+  const remaining = currentWeight - targetWeight;
+
+  if (remaining <= 0) {
+    return "You are at or below your goal weight.";
+  }
+
+  const lost = startWeight - currentWeight;
+
+  if (lost <= 0) {
+    return `${remaining.toFixed(1)} kg left from your current weight.`;
+  }
+
+  return `${lost.toFixed(1)} kg down, ${remaining.toFixed(1)} kg left.`;
 }
 
 export function calculateBmi(weightKg?: number, heightCm?: number) {

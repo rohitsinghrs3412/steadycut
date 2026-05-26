@@ -1,7 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
 import { PublicEntry } from "@/components/steadycut/public-entry";
+import { getOptionalAppUser } from "@/lib/app-auth";
 import {
   getMissingSetupItems,
   hasCoreServerConfig,
@@ -9,9 +9,9 @@ import {
 
 export default async function Home() {
   if (hasCoreServerConfig) {
-    const { userId } = await auth();
+    const user = await getOptionalAppUser();
 
-    if (userId) {
+    if (user) {
       redirect("/dashboard");
     }
   }

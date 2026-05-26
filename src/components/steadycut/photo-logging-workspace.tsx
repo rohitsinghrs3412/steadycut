@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Camera,
   Check,
+  Droplet,
   Image as ImageIcon,
   type LucideIcon,
   Loader2,
@@ -23,7 +24,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type MutableRefObject,
   type ReactNode,
 } from "react";
 
@@ -56,24 +56,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   formatDisplayDate,
+  getFallbackMealItems,
+  formatHydrationVolume,
+  HydrationLog,
+  getMealInputError,
   MealItem,
   MealLog,
   mealTypeOptions,
   MealType,
+  parseMealPortionGrams,
   ScaleLog,
   scaleTimeOptions,
   ScaleTimeOfDay,
   toDateKey,
 } from "@/lib/steadycut";
 import { cn } from "@/lib/utils";
+import {
+  clearPreviewUrl,
+  fetchAndConvertHeicImage,
+  prepareBrowserImageFile,
+} from "@/components/steadycut/photo-file-utils";
 
-type WorkspaceFocus = "meal" | "scale" | "all";
+type WorkspaceFocus = "meal" | "scale" | "hydration" | "all";
 
 type AnalyzeStatus = "idle" | "uploading" | "analyzing" | "done" | "error";
-
-const MAX_REASONABLE_PORTION_GRAMS = 5000;
-const NON_FOOD_DESCRIPTION_PATTERN =
-  /\b(human|human being|person|people|man|woman|boy|girl|child|face|selfie|body)\b/i;
 
 export function PhotoCapturePicker({
   compact = false,
@@ -279,69 +285,42 @@ function EmptyPhotoPreview({
 export function PhotoLoggingWorkspace({
   compact = false,
   focus,
+  showRecentLogs = true,
 }: {
   compact?: boolean;
   focus: WorkspaceFocus;
+  showRecentLogs?: boolean;
 }) {
   const showMeal = focus === "meal" || focus === "all";
   const showScale = focus === "scale" || focus === "all";
+  const showHydration = focus === "hydration" || focus === "all";
 
   return (
     <div
       className={cn(
         compact
           ? "flex flex-col gap-3"
-          : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]"
+          : "grid gap-6 2xl:grid-cols-[minmax(0,1fr)_390px]"
       )}
     >
       <div className="flex flex-col gap-4">
         {showMeal ? <MealPhotoLogger compact={compact} /> : null}
+        {showHydration ? <HydrationPhotoLogger compact={compact} /> : null}
         {showScale ? <ScalePhotoLogger compact={compact} /> : null}
       </div>
-      <div className="flex flex-col gap-4">
-        {showMeal ? <RecentMealLogs compact={compact} /> : null}
-        {showScale ? <RecentScaleLogs compact={compact} /> : null}
-      </div>
+      {showRecentLogs ? (
+        <div className="flex flex-col gap-4">
+          {showMeal ? <RecentMealLogs compact={compact} /> : null}
+          {showHydration ? <RecentHydrationLogs compact={compact} /> : null}
+          {showScale ? <RecentScaleLogs compact={compact} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
   const generateUploadUrl = useMutation(api.uploads.generateUploadUrl);
-  const savePlaceholderMutation = useMutation(
-    api.mealLogs.savePlaceholder
-  ).withOptimisticUpdate((localStore, args) => {
-    const limit = compact ? 3 : 8;
-    const existing = localStore.getQuery(api.mealLogs.listRecent, { limit });
-
-    if (!existing) {
-      return;
-    }
-
-    localStore.setQuery(api.mealLogs.listRecent, { limit }, [
-      {
-        _creationTime: 0,
-        _id: "optimistic-meal-log" as Id<"mealLogs">,
-        id: "optimistic-meal-log" as Id<"mealLogs">,
-        userId: "optimistic",
-        date: args.date,
-        mealType: args.mealType,
-        photoId: args.photoId,
-        photoUrl: null,
-        status: "estimating",
-        description: args.description,
-        portionGrams: args.portionGrams,
-        foodName: "Estimating meal...",
-        items: [],
-        calories: 0,
-        confidence: 0,
-        assumptions: ["Analyzing photo."],
-        createdAt: 0,
-        updatedAt: 0,
-      },
-      ...existing,
-    ]);
-  });
   const saveConfirmedMealLog = useMutation(api.mealLogs.saveConfirmedMealLog);
   const deleteMealLog = useMutation(api.mealLogs.deleteMealLog);
   const analyzeMealPhoto = useAction(api.mealLogs.analyzeMealPhoto);
@@ -405,9 +384,15 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
   }
 
   async function handleAnalyze() {
-    if (!file && !latest?.photoId) {
+    const hasNewFile = Boolean(file);
+    const reusablePhotoId = latest?.photoId as Id<"_storage"> | undefined;
+    const existingMealLogId = latest?.id as Id<"mealLogs"> | undefined;
+
+    if (!file && !reusablePhotoId) {
       setError("Add a food photo first.");
       setStatus("error");
+      setLatest(null);
+      setConfirmMeal(null);
       return;
     }
 
@@ -429,45 +414,32 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
     if (inputError) {
       setError(inputError);
       setStatus("error");
+      setLatest(null);
+      setConfirmMeal(null);
       return;
     }
 
     setError(null);
-    if (file) {
-      setLatest(null);
-    }
-    setStatus(file ? "uploading" : "analyzing");
-
-    let placeholderMealLogId: Id<"mealLogs"> | undefined;
+    setLatest(null);
+    setConfirmMeal(null);
+    setStatus(hasNewFile ? "uploading" : "analyzing");
 
     try {
       const photoId = file
         ? await uploadToConvex(file, generateUploadUrl)
-        : (latest?.photoId as Id<"_storage">);
-      placeholderMealLogId = file
-        ? await savePlaceholderMutation({
-            date,
-            mealType,
-            photoId,
-            description: combinedDescription || undefined,
-            portionGrams: parsedPortionGrams,
-          })
-        : undefined;
+        : reusablePhotoId;
 
       setStatus("analyzing");
       const result = (await analyzeMealPhoto({
         date,
         mealType,
-        photoId,
+        photoId: photoId as Id<"_storage">,
         description: combinedDescription || undefined,
         portionGrams: parsedPortionGrams,
-        placeholderMealLogId,
-        existingMealLogId: file
-          ? undefined
-          : (latest?.id as Id<"mealLogs"> | undefined),
+        existingMealLogId: hasNewFile ? undefined : existingMealLogId,
       })) as MealLog;
 
-      if (placeholderMealLogId) {
+      if (hasNewFile) {
         setConfirmMeal(result);
       } else {
         setLatest(result);
@@ -476,15 +448,9 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
       }
       setStatus("done");
     } catch (caught) {
-      if (placeholderMealLogId) {
-        try {
-          await deleteMealLog({ id: placeholderMealLogId });
-        } catch {
-          // The action may have already removed the placeholder.
-        }
-      }
-
       setError(getErrorMessage(caught, "Meal analysis failed."));
+      setLatest(null);
+      setConfirmMeal(null);
       setStatus("error");
     }
   }
@@ -546,7 +512,7 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
       <CardContent
         className={cn(
           "grid gap-4",
-          compact ? "grid-cols-1" : "lg:grid-cols-[260px_minmax(0,1fr)]"
+          compact ? "grid-cols-1" : "lg:grid-cols-[260px_minmax(0,1fr)] 2xl:grid-cols-1"
         )}
       >
         <PhotoCapturePicker
@@ -561,7 +527,7 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
         />
 
         <div className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 lg:grid-cols-1">
             <div className="flex flex-col gap-2">
               <Label>Date</Label>
               <Input
@@ -669,6 +635,193 @@ function MealPhotoLogger({ compact = false }: { compact?: boolean }) {
         }}
         onSave={handleConfirmSave}
       />
+    </Card>
+  );
+}
+
+function HydrationPhotoLogger({ compact = false }: { compact?: boolean }) {
+  const generateUploadUrl = useMutation(api.uploads.generateUploadUrl);
+  const analyzeHydrationPhoto = useAction(
+    api.hydrationLogs.analyzeHydrationPhoto
+  );
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const fileSelectionRef = useRef(0);
+  const [isPreparingPhoto, setIsPreparingPhoto] = useState(false);
+  const [date, setDate] = useState(toDateKey());
+  const [context, setContext] = useState("");
+  const [latest, setLatest] = useState<HydrationLog | null>(null);
+  const [status, setStatus] = useState<AnalyzeStatus>("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => () => clearPreviewUrl(previewUrlRef), []);
+
+  async function handleHydrationFileChange(nextFile: File | null) {
+    const selectionId = fileSelectionRef.current + 1;
+    fileSelectionRef.current = selectionId;
+    clearPreviewUrl(previewUrlRef);
+    setError(null);
+    setFile(null);
+    setPreviewUrl(null);
+
+    if (!nextFile) {
+      setIsPreparingPhoto(false);
+      return;
+    }
+
+    setLatest(null);
+    setIsPreparingPhoto(true);
+
+    try {
+      const displayableFile = await prepareBrowserImageFile(nextFile);
+
+      if (fileSelectionRef.current !== selectionId) {
+        return;
+      }
+
+      const nextPreviewUrl = URL.createObjectURL(displayableFile);
+      previewUrlRef.current = nextPreviewUrl;
+      setFile(displayableFile);
+      setPreviewUrl(nextPreviewUrl);
+    } catch {
+      if (fileSelectionRef.current === selectionId) {
+        setError(
+          "This photo format could not be prepared for preview. Try saving it as JPG or PNG, then upload again."
+        );
+      }
+    } finally {
+      if (fileSelectionRef.current === selectionId) {
+        setIsPreparingPhoto(false);
+      }
+    }
+  }
+
+  async function handleAnalyze() {
+    if (!file) {
+      setError("Add a bottle, glass, or mug photo first.");
+      setStatus("error");
+      return;
+    }
+
+    if (context.length > 500) {
+      setError("Beverage details must be 500 characters or less.");
+      setStatus("error");
+      return;
+    }
+
+    setError(null);
+    setStatus("uploading");
+
+    try {
+      const photoId = await uploadToConvex(file, generateUploadUrl);
+      setStatus("analyzing");
+      const result = (await analyzeHydrationPhoto({
+        date,
+        photoId,
+        context: context.trim() || undefined,
+      })) as HydrationLog;
+
+      setLatest(result);
+      handleHydrationFileChange(null);
+      setStatus("done");
+    } catch (caught) {
+      setError(getErrorMessage(caught, "Hydration estimate failed."));
+      setStatus("error");
+    }
+  }
+
+  const isBusy =
+    status === "uploading" || status === "analyzing" || isPreparingPhoto;
+
+  return (
+    <Card
+      size={compact ? "sm" : "default"}
+      className={cn(
+        "glass-card !overflow-visible transition-all duration-300",
+        isBusy && "glow-highlight-primary"
+      )}
+    >
+      <CardHeader className="flex-row items-start justify-between">
+        <div>
+          <CardTitle>{compact ? "Hydration photo" : "Beverage volume log"}</CardTitle>
+          {!compact ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Snap a bottle, glass, tumbler, or mug. Gemini estimates the ml for
+              today.
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2 text-sm font-medium text-primary">
+          <Sparkles />
+          Gemini
+        </div>
+      </CardHeader>
+      <CardContent
+        className={cn(
+          "grid gap-4",
+          compact
+            ? "grid-cols-1"
+            : "lg:grid-cols-[260px_minmax(0,1fr)] 2xl:grid-cols-1"
+        )}
+      >
+        <PhotoCapturePicker
+          compact={compact}
+          emptyDescription="Take a new photo or choose one from your gallery."
+          emptyTitle="Add drink photo"
+          existingImageUrl={latest?.photoUrl}
+          isPreparingPreview={isPreparingPhoto}
+          previewAlt="Beverage preview"
+          previewUrl={previewUrl}
+          onFileChange={handleHydrationFileChange}
+        />
+
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="flex flex-col gap-2">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Container details</Label>
+              <Input
+                placeholder="Optional: 1L bottle, half-full mug"
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+              />
+            </div>
+          </div>
+
+          {error ? (
+            <Alert variant="destructive">
+              <AlertTriangle />
+              <AlertTitle>Could not estimate volume</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <Button className="h-11" disabled={isBusy} onClick={handleAnalyze}>
+            {isBusy ? (
+              <Loader2 data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <Droplet data-icon="inline-start" />
+            )}
+            {status === "uploading"
+              ? "Uploading photo..."
+              : isPreparingPhoto
+                ? "Preparing photo..."
+                : status === "analyzing"
+                ? "Estimating volume..."
+                : "Log drink volume"}
+          </Button>
+
+          {latest ? <HydrationResult log={latest} /> : null}
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -783,7 +936,7 @@ function ScalePhotoLogger({ compact = false }: { compact?: boolean }) {
       <CardContent
         className={cn(
           "grid gap-4",
-          compact ? "grid-cols-1" : "lg:grid-cols-[260px_minmax(0,1fr)]"
+          compact ? "grid-cols-1" : "lg:grid-cols-[260px_minmax(0,1fr)] 2xl:grid-cols-1"
         )}
       >
         <PhotoCapturePicker
@@ -798,7 +951,7 @@ function ScalePhotoLogger({ compact = false }: { compact?: boolean }) {
         />
 
         <div className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-1">
             <div className="flex flex-col gap-2">
               <Label>Date</Label>
               <Input
@@ -976,7 +1129,7 @@ function MealConfirmSheetContent({
   return (
     <Sheet open={Boolean(meal)} onOpenChange={onOpenChange}>
       <SheetContent
-        className="max-h-[92svh] overflow-y-auto p-0"
+        className="max-h-[92svh] overflow-y-auto p-0 sm:max-w-xl sm:mx-auto sm:left-1/2 sm:-translate-x-1/2 sm:rounded-t-xl sm:border-x"
         showCloseButton={false}
         side="bottom"
       >
@@ -1114,19 +1267,6 @@ function MealItemEditor({
   );
 }
 
-function getFallbackMealItems(meal: MealLog): MealItem[] {
-  return [
-    {
-      name: meal.foodName,
-      calories: meal.calories,
-      proteinGrams: meal.proteinGrams,
-      carbsGrams: meal.carbsGrams,
-      fatGrams: meal.fatGrams,
-      portionGrams: meal.portionGrams,
-    },
-  ];
-}
-
 function ScaleResult({ log }: { log: ScaleLog }) {
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -1146,6 +1286,38 @@ function ScaleResult({ log }: { log: ScaleLog }) {
           ? log.note ?? "The display was unclear. Try another photo."
           : `Saved as the ${log.timeOfDay} reading for ${formatDisplayDate(log.date)}.`}
       </p>
+    </div>
+  );
+}
+
+function HydrationResult({ log }: { log: HydrationLog }) {
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm text-muted-foreground">Estimated drink</div>
+          <div className="text-lg font-semibold">{log.beverageName}</div>
+          <div className="text-sm text-muted-foreground">{log.containerName}</div>
+        </div>
+        <Badge className="bg-primary text-primary-foreground">
+          {Math.round(log.confidence * 100)}% confidence
+        </Badge>
+      </div>
+      <div className="mt-4 flex items-end gap-2">
+        <span className="text-3xl font-semibold">
+          {formatHydrationVolume(log.volumeMl)}
+        </span>
+        <span className="pb-1 text-sm text-muted-foreground">added today</span>
+      </div>
+      <Separator className="my-4" />
+      <ul className="space-y-1 text-sm text-muted-foreground">
+        {log.assumptions.map((assumption) => (
+          <li key={assumption} className="flex gap-2">
+            <Check className="mt-0.5 size-4 text-primary" />
+            <span>{assumption}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1185,6 +1357,51 @@ function RecentMealLogs({ compact = false }: { compact?: boolean }) {
                   {log.status === "estimating"
                     ? "Estimating..."
                     : `${Math.round(log.calories)} kcal`}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentHydrationLogs({ compact = false }: { compact?: boolean }) {
+  const logs = useQuery(api.hydrationLogs.listRecent, {
+    limit: compact ? 3 : 8,
+  }) as HydrationLog[] | undefined;
+
+  return (
+    <Card size={compact ? "sm" : "default"} className="glass-card transition-all duration-300">
+      <CardHeader>
+        <CardTitle>Drink photos</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {!logs ? (
+          <ListSkeleton />
+        ) : logs.length === 0 ? (
+          <EmptyState icon={Droplet} text="No drink photos logged yet." />
+        ) : (
+          logs.map((log) => (
+            <div
+              key={log.id}
+              className="flex gap-3 rounded-lg p-3 glass-card spring-bounce border border-border hover:border-primary/50 transition-all duration-300"
+            >
+              <PhotoThumbnail
+                alt={log.beverageName}
+                icon={Droplet}
+                src={log.photoUrl}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">
+                  {log.beverageName}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {formatDisplayDate(log.date)} - {log.containerName}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-primary">
+                  {formatHydrationVolume(log.volumeMl)}
                 </div>
               </div>
             </div>
@@ -1404,7 +1621,7 @@ function EmptyState({
   icon: Icon,
   text,
 }: {
-  icon: typeof Utensils;
+  icon: LucideIcon;
   text: string;
 }) {
   return (
@@ -1427,42 +1644,6 @@ function ListSkeleton() {
 
 function formatMacro(value?: number) {
   return value == null ? "--" : `${Math.round(value)} g`;
-}
-
-function parseMealPortionGrams(value: string) {
-  if (!value.trim()) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function getMealInputError({
-  description,
-  portionGrams,
-  portionGramsField,
-}: {
-  description: string;
-  portionGrams?: number;
-  portionGramsField: string;
-}) {
-  if (portionGramsField.trim()) {
-    if (
-      typeof portionGrams !== "number" ||
-      portionGrams <= 0 ||
-      portionGrams > MAX_REASONABLE_PORTION_GRAMS
-    ) {
-      return `Approx grams must be between 1 and ${MAX_REASONABLE_PORTION_GRAMS}. Use food or drink weight only.`;
-    }
-  }
-
-  if (NON_FOOD_DESCRIPTION_PATTERN.test(description)) {
-    return "This does not look like a food or drink entry. Upload a meal photo and describe only edible items.";
-  }
-
-  return null;
 }
 
 function fieldToNumber(value: string) {
@@ -1505,65 +1686,4 @@ async function uploadToConvex(
 
   const { storageId } = (await response.json()) as { storageId: string };
   return storageId as Id<"_storage">;
-}
-
-async function prepareBrowserImageFile(file: File) {
-  if (!isHeicLike(file.type, file.name)) {
-    return file;
-  }
-
-  const convertedBlob = await convertHeicBlobToJpeg(file);
-  const convertedName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
-
-  return new File([convertedBlob], convertedName, {
-    lastModified: file.lastModified,
-    type: "image/jpeg",
-  });
-}
-
-async function fetchAndConvertHeicImage(src: string) {
-  const response = await fetch(src);
-
-  if (!response.ok) {
-    throw new Error("Image could not be loaded.");
-  }
-
-  const blob = await response.blob();
-
-  if (!isHeicLike(blob.type, src)) {
-    throw new Error("Image is not a HEIC file.");
-  }
-
-  return await convertHeicBlobToJpeg(blob);
-}
-
-async function convertHeicBlobToJpeg(blob: Blob) {
-  const { default: heic2any } = await import("heic2any");
-  const converted = await heic2any({
-    blob,
-    quality: 0.9,
-    toType: "image/jpeg",
-  });
-  const firstBlob = Array.isArray(converted) ? converted[0] : converted;
-
-  if (!firstBlob) {
-    throw new Error("HEIC conversion failed.");
-  }
-
-  return firstBlob;
-}
-
-function isHeicLike(type: string | undefined, nameOrUrl: string) {
-  return (
-    type === "image/heic" ||
-    type === "image/heif" ||
-    /\.(heic|heif)(?:$|[?#])/i.test(nameOrUrl)
-  );
-}
-
-function clearPreviewUrl(ref: MutableRefObject<string | null>) {
-  if (ref.current) {
-    URL.revokeObjectURL(ref.current);
-    ref.current = null;
-  }
 }

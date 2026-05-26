@@ -1,0 +1,14 @@
+.git
+.next
+.qa
+node_modules
+coverage
+build
+out
+
+.env*
+*.log
+*.pid
+*.tsbuildinfo
+
+wordle_win_bylaw.png

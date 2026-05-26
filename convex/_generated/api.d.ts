@@ -8,11 +8,15 @@
  * @module
  */
 
+import type * as ai_knownFoodEstimates from "../ai/knownFoodEstimates.js";
+import type * as ai_mealPrompt from "../ai/mealPrompt.js";
 import type * as checkIns from "../checkIns.js";
 import type * as coach from "../coach.js";
 import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as habits from "../habits.js";
+import type * as hydrationAnalysis from "../hydrationAnalysis.js";
+import type * as hydrationLogs from "../hydrationLogs.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_defaultHabits from "../lib/defaultHabits.js";
 import type * as mealAnalysis from "../mealAnalysis.js";
@@ -31,11 +35,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "ai/knownFoodEstimates": typeof ai_knownFoodEstimates;
+  "ai/mealPrompt": typeof ai_mealPrompt;
   checkIns: typeof checkIns;
   coach: typeof coach;
   crons: typeof crons;
   dashboard: typeof dashboard;
   habits: typeof habits;
+  hydrationAnalysis: typeof hydrationAnalysis;
+  hydrationLogs: typeof hydrationLogs;
   "lib/auth": typeof lib_auth;
   "lib/defaultHabits": typeof lib_defaultHabits;
   mealAnalysis: typeof mealAnalysis;

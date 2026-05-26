@@ -2,11 +2,13 @@
 
 import webpush from "web-push";
 import { anyApi } from "convex/server";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 
 type PushSubscriptionDoc = {
-  _id: string;
+  _id: Id<"pushSubscriptions">;
   endpoint: string;
   p256dh: string;
   auth: string;
@@ -39,11 +41,11 @@ export const sendTest = action({
   },
 });
 
-export const sendDueReminders = action({
+export const sendDueReminders = internalAction({
   args: {},
   handler: async (ctx) => {
     const subscriptions = (await ctx.runQuery(
-      anyApi.pushNotifications.listDueSubscriptions,
+      internal.pushNotifications.listDueSubscriptions,
       {}
     )) as PushSubscriptionDoc[];
     let sent = 0;
@@ -53,7 +55,6 @@ export const sendDueReminders = action({
 
       if (
         local.hour !== subscription.reminderHourLocal ||
-        local.minute >= 15 ||
         subscription.lastSentDate === local.date
       ) {
         continue;
@@ -67,14 +68,14 @@ export const sendDueReminders = action({
           icon: "/icon-192x192.png",
           badge: "/badge-96x96.png",
         });
-        await ctx.runMutation(anyApi.pushNotifications.markReminderSent, {
+        await ctx.runMutation(internal.pushNotifications.markReminderSent, {
           id: subscription._id,
           date: local.date,
         });
         sent += 1;
       } catch (caught) {
         if (isGonePushSubscription(caught)) {
-          await ctx.runMutation(anyApi.pushNotifications.deleteSubscriptionById, {
+          await ctx.runMutation(internal.pushNotifications.deleteSubscriptionById, {
             id: subscription._id,
           });
         }

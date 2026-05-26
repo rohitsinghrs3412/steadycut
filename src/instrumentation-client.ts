@@ -5,6 +5,7 @@ const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 Sentry.init({
   dsn: sentryDsn,
   enabled: Boolean(sentryDsn),
+  environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
   sendDefaultPii: false,
   enableLogs: true,
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,

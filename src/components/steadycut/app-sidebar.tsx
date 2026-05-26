@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Bot,
   Camera,
   Flame,
   Home,
@@ -31,13 +32,14 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { label: "Today", href: "/dashboard", icon: Home },
   { label: "Food", href: "/coach", icon: Camera },
+  { label: "AI Coach", href: "/live-coach", icon: Bot },
   { label: "Progress", href: "/progress", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function DesktopAppSidebar({ streak = 0 }: { streak?: number }) {
   return (
-    <aside className="hidden min-h-screen border-r bg-sidebar lg:flex lg:flex-col">
+    <aside className="sticky top-0 hidden h-screen border-r bg-sidebar lg:flex lg:flex-col">
       <AppSidebarContent streak={streak} />
     </aside>
   );
@@ -82,11 +84,11 @@ export function AppSidebarContent({ streak = 0 }: { streak?: number }) {
 
   return (
     <div className="flex h-full flex-col p-5">
-      <Link className="flex items-center gap-3" href="/dashboard">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+      <Link className="group flex items-center gap-3 transition-transform duration-200 active:scale-[0.98]" href="/dashboard">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:scale-105">
           <Flame />
         </div>
-        <div className="text-xl font-semibold text-sidebar-foreground">
+        <div className="text-xl font-semibold text-sidebar-foreground tracking-tight">
           SteadyCut
         </div>
       </Link>
@@ -100,13 +102,13 @@ export function AppSidebarContent({ streak = 0 }: { streak?: number }) {
             <Link
               key={item.href}
               className={cn(
-                "flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                "group flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-sidebar-foreground/70 transition-all hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground active:scale-[0.98]",
                 isActive &&
-                  "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                  "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
               )}
               href={item.href}
             >
-              <item.icon />
+              <item.icon className="size-4 shrink-0 transition-transform group-hover:scale-110 duration-200" />
               {item.label}
             </Link>
           );
@@ -114,16 +116,16 @@ export function AppSidebarContent({ streak = 0 }: { streak?: number }) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-4">
-        <div className="rounded-lg border bg-card p-4">
+        <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 transition-all hover:bg-sidebar-accent/50">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Flame />
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-[0_0_15px_-3px_oklch(var(--primary)/0.2)] animate-pulse">
+              <Flame className="size-5 fill-primary/20" />
             </div>
             <div>
-              <div className="text-2xl font-semibold leading-none text-primary">
+              <div className="text-2xl font-bold leading-none text-primary tracking-tight">
                 {streak}
               </div>
-              <div className="text-sm text-muted-foreground">day streak</div>
+              <div className="text-xs text-sidebar-foreground/75 mt-0.5">day streak</div>
             </div>
           </div>
         </div>
@@ -170,9 +172,9 @@ function ClerkAccountFooter({ profileName }: { profileName?: string }) {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-3">
       <button
-        className="flex w-full items-center gap-3 rounded-md text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex w-full items-center gap-3 rounded-md p-1 text-left outline-none transition-colors hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         type="button"
         onClick={handleOpenProfile}
       >
@@ -186,25 +188,25 @@ function ClerkAccountFooter({ profileName }: { profileName?: string }) {
       </button>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Button
-          className="h-8"
+          className="h-8 border-sidebar-border/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-xs"
           disabled={!isLoaded}
           size="sm"
           type="button"
           variant="outline"
           onClick={handleOpenProfile}
         >
-          <UserRound data-icon="inline-start" />
+          <UserRound className="size-3.5 mr-1" />
           Profile
         </Button>
         <Button
-          className="h-8"
+          className="h-8 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-xs"
           disabled={!isLoaded || !isSignedIn}
           size="sm"
           type="button"
           variant="ghost"
           onClick={handleSignOut}
         >
-          <LogOut data-icon="inline-start" />
+          <LogOut className="size-3.5 mr-1" />
           Log out
         </Button>
       </div>
@@ -217,7 +219,7 @@ function FallbackAccountFooter({ profileName }: { profileName?: string }) {
 
   return (
     <Link
-      className="flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/60"
+      className="flex items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-3 transition-colors hover:bg-sidebar-accent/50"
       href="/settings"
     >
       <AccountAvatar
@@ -253,9 +255,9 @@ function AccountAvatar({
 
 function AccountText({ label, name }: { label: string; name: string }) {
   return (
-    <div className="min-w-0">
-      <div className="truncate text-sm font-semibold">{name}</div>
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
+    <div className="min-w-0 flex-1">
+      <div className="truncate text-xs font-semibold text-sidebar-foreground">{name}</div>
+      <div className="truncate text-[10px] text-sidebar-foreground/60">{label}</div>
     </div>
   );
 }

@@ -36,11 +36,7 @@ export const upsertSubscription = mutation({
       .query("pushSubscriptions")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
-    const existing = subscriptions[0];
-
-    for (const duplicate of subscriptions.slice(1)) {
-      await ctx.db.delete(duplicate._id);
-    }
+    const existing = subscriptions.find((s) => s.endpoint === args.endpoint);
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -65,19 +61,22 @@ export const updateReminderHour = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getUserId(ctx);
-    const subscription = await ctx.db
+    const subscriptions = await ctx.db
       .query("pushSubscriptions")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+      .collect();
 
-    if (!subscription) {
+    if (subscriptions.length === 0) {
       throw new Error("Enable notifications before changing the reminder time.");
     }
 
-    await ctx.db.patch(subscription._id, {
-      reminderHourLocal: args.reminderHourLocal,
-      updatedAt: Date.now(),
-    });
+    const now = Date.now();
+    for (const subscription of subscriptions) {
+      await ctx.db.patch(subscription._id, {
+        reminderHourLocal: args.reminderHourLocal,
+        updatedAt: now,
+      });
+    }
   },
 });
 

@@ -1,32 +1,58 @@
 "use node";
 
 import { google } from "@ai-sdk/google";
-import { APICallError, generateText, NoObjectGeneratedError, Output } from "ai";
+import {
+  APICallError,
+  generateText,
+  NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  Output,
+  RetryError,
+} from "ai";
 import { anyApi } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { z } from "zod";
 
 import { action } from "./_generated/server";
+import { KNOWN_FOOD_ESTIMATES } from "./ai/knownFoodEstimates";
+import {
+  buildMealPrompt,
+  DESCRIPTION_FALLBACK_MODELS,
+  GEMINI_MAX_OUTPUT_TOKENS,
+  GEMINI_MAX_RETRIES,
+  GEMINI_TIMEOUT_MS,
+  MEAL_ANALYSIS_SYSTEM,
+  PRIMARY_GEMINI_MODEL,
+  type MealEstimateSource,
+} from "./ai/mealPrompt";
 import { getUserId } from "./lib/auth";
 import { mealTypeValidator } from "./schema";
 
 const MAX_REASONABLE_PORTION_GRAMS = 5000;
+const MAX_DESCRIPTION_CHARS = 800;
+const MAX_MEAL_PHOTO_BYTES = 8 * 1024 * 1024;
 const NON_FOOD_DESCRIPTION_PATTERN =
   /\b(human|human being|person|people|man|woman|boy|girl|child|face|selfie|body)\b/i;
+const calorieNumberSchema = z.coerce.number();
 
 const mealItemSchema = z.object({
-  name: z.string().min(2).max(250),
-  calories: z.number().min(0).max(3000),
-  proteinGrams: z.number().min(0).max(250).nullable().optional(),
-  carbsGrams: z.number().min(0).max(400).nullable().optional(),
-  fatGrams: z.number().min(0).max(250).nullable().optional(),
-  portionGrams: z.number().min(0).max(3000).nullable().optional(),
+  name: z.string().min(1).max(250),
+  calories: calorieNumberSchema.min(0).max(50000),
+  proteinGrams: calorieNumberSchema.min(0).max(2000).nullable().optional(),
+  carbsGrams: calorieNumberSchema.min(0).max(5000).nullable().optional(),
+  fatGrams: calorieNumberSchema.min(0).max(5000).nullable().optional(),
+  portionGrams: z
+    .coerce.number()
+    .min(0)
+    .max(MAX_REASONABLE_PORTION_GRAMS)
+    .nullable()
+    .optional(),
 });
 
 const mealEstimateSchema = z.object({
   foodName: z
     .string()
-    .min(2)
+    .min(1)
     .max(250)
     .describe("Short display name for the overall meal."),
   items: z
@@ -35,14 +61,16 @@ const mealEstimateSchema = z.object({
     .max(20)
     .describe("Separate visible meal items with kcal and macro estimates."),
   confidence: z
-    .number()
-    .min(0.05)
+    .coerce.number()
+    .min(0)
     .max(100)
+    .nullable()
+    .optional()
     .describe(
       "Confidence from 0.05 to 1. If using a 1-10 or 1-100 scale, the server will normalize it."
     ),
-  assumptions: z.array(z.string().min(3).max(500)).min(1).max(15),
-  followUpQuestion: z.string().min(5).max(500).nullable().optional(),
+  assumptions: z.array(z.string().max(500)).max(15).optional(),
+  followUpQuestion: z.string().max(500).nullable().optional(),
 });
 
 type MealEstimate = z.infer<typeof mealEstimateSchema>;
@@ -54,9 +82,21 @@ type SavedMealItem = {
   fatGrams?: number;
   portionGrams?: number;
 };
-type SavedMealEstimate = Omit<MealEstimate, "items" | "followUpQuestion"> & {
+type SavedMealEstimate = {
+  foodName: string;
   items: SavedMealItem[];
+  confidence: number;
+  assumptions: string[];
   followUpQuestion?: string;
+};
+type ErrorSummary = {
+  name?: string;
+  message?: string;
+  statusCode?: number;
+  finishReason?: string;
+  text?: string;
+  reason?: string;
+  lastError?: ErrorSummary;
 };
 
 export const analyzeMealPhoto = action({
@@ -79,6 +119,12 @@ export const analyzeMealPhoto = action({
 
       if (!blob) {
         throw new ConvexError("Uploaded meal photo could not be found.");
+      }
+
+      if (blob.size > MAX_MEAL_PHOTO_BYTES) {
+        throw new ConvexError(
+          "That photo is too large to analyze reliably. Try a smaller or clearer meal photo."
+        );
       }
 
       const image = await blob.arrayBuffer();
@@ -132,6 +178,16 @@ async function estimateMeal({
   description?: string;
   portionGrams?: number;
 }): Promise<SavedMealEstimate> {
+  const knownFoodFallback = estimateMealFromKnownFoodDescription({
+    description,
+    portionGrams,
+    sourceError: new Error("Gemini API is not configured or request failed."),
+  });
+
+  if (knownFoodFallback) {
+    return knownFoodFallback;
+  }
+
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     throw new Error(
       "Gemini is not configured yet. Add the Google AI Studio API key, then try this meal again."
@@ -139,42 +195,119 @@ async function estimateMeal({
   }
 
   try {
-    const { output } = await generateText({
-      model: google("gemini-2.5-flash"),
-      maxRetries: 4,
-      timeout: { totalMs: 60000 },
-      output: Output.object({ schema: mealEstimateSchema }),
-      system:
-        "You estimate calories from food photos for a private Indian user. Return careful estimates, not medical advice. Consider common Indian foods, oil/ghee, sauces, fried items, rice/roti portions, and visible serving size. Always make the best reasonable estimate from the photo and/or the user description. If the photo shows packaging, a carton, a label, or the food/drink is not directly visible but the user description specifies what it is (e.g. 'Milk 200ml'), estimate the food/drink using the user description. Never return an empty items array if food/drink details are present in the user description. If absolutely no food can be identified in either the photo or description, return a single item with 0 calories named 'Unrecognized' with a low confidence (0.05) and explain this in the assumptions, so that schema validation does not fail. Confidence must be a decimal from 0.05 to 1, not a 1-10 score. If portion grams are provided, use them and do not ask for grams again. If the user says oily, fried, not oily, grilled, baked, or similar, use that and do not ask about oil/frying again. Only include one follow-up question for genuinely missing details that would materially change the estimate. Do not shame the user.",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: [
-                `Meal type: ${mealType}`,
-                `User description: ${description?.trim() || "not provided"}`,
-                `Portion grams: ${portionGrams ?? "not provided"}`,
-                "Estimate total calories and macros for the full meal. Prefer kg/grams units. Keep assumptions concrete and include supplied grams/oil details in the assumptions when relevant.",
-                "Split foods into separate items whenever useful, such as rice, dal, paneer, roti, sabzi, chutney, dessert, or drink. If the food packaging or carton is pictured, use the user's description (e.g. 'Milk 200ml') to estimate the item(s). Return item calories and macros; the server will sum totals.",
-              ].join("\n"),
-            },
-            {
-              type: "image",
-              image,
-              mediaType,
-            },
-          ],
-        },
-      ],
+    return await generateMealEstimate({
+      image,
+      mediaType,
+      mealType,
+      description,
+      portionGrams,
+      source: "photo",
+    });
+  } catch (caught) {
+    const descriptionFallback = await tryEstimateMealFromDescription(caught, {
+      mealType,
+      description,
+      portionGrams,
     });
 
-    return normalizeMealEstimate(output, { description, portionGrams });
-  } catch (caught) {
+    if (descriptionFallback) {
+      return descriptionFallback;
+    }
+
     console.error("Meal analysis failed", caught);
     throw getClientSafeMealAnalysisError(caught);
   }
+}
+
+async function generateMealEstimate({
+  image,
+  mediaType,
+  mealType,
+  description,
+  portionGrams,
+  source,
+  modelId = PRIMARY_GEMINI_MODEL,
+}: {
+  image?: ArrayBuffer;
+  mediaType?: string;
+  mealType: string;
+  description?: string;
+  portionGrams?: number;
+  source: MealEstimateSource;
+  modelId?: string;
+}): Promise<SavedMealEstimate> {
+  const promptText = buildMealPrompt({
+    mealType,
+    description,
+    portionGrams,
+    source,
+  });
+  const content = image
+    ? [
+        {
+          type: "text" as const,
+          text: promptText,
+        },
+        {
+          type: "image" as const,
+          image,
+          mediaType: mediaType || "image/jpeg",
+        },
+      ]
+    : promptText;
+
+  const { output } = await generateText({
+    model: google(modelId),
+    maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+    maxRetries: GEMINI_MAX_RETRIES,
+    temperature: 0.1,
+    timeout: { totalMs: GEMINI_TIMEOUT_MS },
+    output: Output.object({ schema: mealEstimateSchema }),
+    system: MEAL_ANALYSIS_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+  });
+
+  return normalizeMealEstimate(output, { description, portionGrams });
+}
+
+async function tryEstimateMealFromDescription(
+  caught: unknown,
+  context: {
+    mealType: string;
+    description?: string;
+    portionGrams?: number;
+  }
+) {
+  if (!shouldTryDescriptionFallback(caught, context.description)) {
+    return null;
+  }
+
+  console.warn(
+    "Meal photo analysis failed; retrying from food details only",
+    getErrorSummary(caught)
+  );
+
+  for (const modelId of DESCRIPTION_FALLBACK_MODELS) {
+    try {
+      return await generateMealEstimate({
+        ...context,
+        source: "description",
+        modelId,
+      });
+    } catch (fallbackError) {
+      console.warn("Meal description fallback failed", {
+        modelId,
+        error: getErrorSummary(fallbackError),
+      });
+    }
+  }
+
+  return null;
 }
 
 function getClientSafeMealAnalysisError(caught: unknown) {
@@ -196,14 +329,20 @@ function getClientSafeMealAnalysisError(caught: unknown) {
     }
   }
 
+  if (NoOutputGeneratedError.isInstance(caught) || RetryError.isInstance(caught)) {
+    return new ConvexError(
+      "Gemini could not finish this estimate right now. The meal was not saved; try again in a minute."
+    );
+  }
+
   if (NoObjectGeneratedError.isInstance(caught)) {
     return new ConvexError(
-      "Gemini returned an incomplete calorie estimate. Add a short food detail and try again."
+      "Gemini returned an incomplete calorie estimate. Try a clearer photo or a shorter food detail."
     );
   }
 
   return new ConvexError(
-    "Gemini could not return a valid calorie estimate. The meal was not saved; add any missing food details and try again."
+    "Gemini could not return a valid calorie estimate. The meal was not saved; try a clearer photo or shorter food details."
   );
 }
 
@@ -225,6 +364,12 @@ function validateMealRequest({
     );
   }
 
+  if (description && description.trim().length > MAX_DESCRIPTION_CHARS) {
+    throw new ConvexError(
+      `Food details must be ${MAX_DESCRIPTION_CHARS} characters or less.`
+    );
+  }
+
   if (description && NON_FOOD_DESCRIPTION_PATTERN.test(description)) {
     throw new ConvexError(
       "This does not look like a food or drink entry. Upload a meal photo and describe only edible items."
@@ -237,12 +382,17 @@ function normalizeMealEstimate(
   context: { description?: string; portionGrams?: number }
 ): SavedMealEstimate {
   const normalizedItems = estimate.items.map(normalizeMealItem);
+  const foodName =
+    estimate.foodName.trim() ||
+    (normalizedItems.length > 1
+      ? `${normalizedItems[0]?.name ?? "Meal"} + ${normalizedItems.length - 1}`
+      : normalizedItems[0]?.name ?? "Meal");
   const totalCalories = normalizedItems.reduce(
     (sum, item) => sum + item.calories,
     0
   );
   const looksUnrecognized =
-    estimate.foodName.trim().toLowerCase() === "unrecognized" ||
+    foodName.toLowerCase() === "unrecognized" ||
     normalizedItems.every(
       (item) =>
         item.calories <= 0 ||
@@ -256,8 +406,9 @@ function normalizeMealEstimate(
   }
 
   return {
-    ...estimate,
-    confidence: normalizeConfidence(estimate.confidence),
+    foodName,
+    confidence: normalizeConfidence(estimate.confidence ?? 0.5),
+    assumptions: normalizeAssumptions(estimate.assumptions, context),
     items: normalizedItems,
     followUpQuestion: refineFollowUpQuestion(
       estimate.followUpQuestion ?? undefined,
@@ -282,13 +433,214 @@ function normalizeMealItem(item: {
   portionGrams?: number | null;
 }): SavedMealItem {
   return {
-    name: item.name.trim(),
+    name: item.name.trim() || "Meal item",
     calories: Math.max(Math.round(item.calories), 0),
     proteinGrams: item.proteinGrams ?? undefined,
     carbsGrams: item.carbsGrams ?? undefined,
     fatGrams: item.fatGrams ?? undefined,
     portionGrams: item.portionGrams ?? undefined,
   };
+}
+
+function estimateMealFromKnownFoodDescription({
+  description,
+  portionGrams,
+  sourceError,
+}: {
+  description?: string;
+  portionGrams?: number;
+  sourceError: unknown;
+}): SavedMealEstimate | null {
+  if (!hasUsableFoodDescription(description)) {
+    return null;
+  }
+
+  const normalizedDescription = description?.trim() ?? "";
+  const food = KNOWN_FOOD_ESTIMATES.find((candidate) =>
+    candidate.patterns.some((pattern) => pattern.test(normalizedDescription))
+  );
+
+  if (!food) {
+    return null;
+  }
+
+  const grams =
+    normalizeFallbackPortionGrams(portionGrams) ??
+    parsePortionFromDescription(normalizedDescription) ??
+    food.defaultPortionGrams;
+
+  if (!grams) {
+    return null;
+  }
+
+  const multiplier = grams / 100;
+  const calories = Math.max(Math.round(food.caloriesPer100g * multiplier), 1);
+
+  console.warn("Using standard nutrition fallback for meal estimate", {
+    foodName: food.name,
+    portionGrams: grams,
+    sourceError: getErrorSummary(sourceError),
+  });
+
+  return {
+    foodName: food.name,
+    confidence: 0.58,
+    assumptions: [
+      "Gemini was unavailable, so this used a standard nutrition estimate.",
+      `Estimated from food details: ${normalizedDescription}`,
+      `Used portion: ${grams} g.`,
+    ],
+    items: [
+      {
+        name: food.name,
+        calories,
+        proteinGrams: roundMacro(food.proteinPer100g * multiplier),
+        carbsGrams: roundMacro(food.carbsPer100g * multiplier),
+        fatGrams: roundMacro(food.fatPer100g * multiplier),
+        portionGrams: grams,
+      },
+    ],
+  };
+}
+
+function normalizeFallbackPortionGrams(portionGrams?: number) {
+  if (
+    typeof portionGrams === "number" &&
+    Number.isFinite(portionGrams) &&
+    portionGrams > 0 &&
+    portionGrams <= MAX_REASONABLE_PORTION_GRAMS
+  ) {
+    return Math.round(portionGrams);
+  }
+
+  return undefined;
+}
+
+function parsePortionFromDescription(description: string) {
+  const portionMatch = description.match(
+    /\b(\d+(?:\.\d+)?)\s*(g|gm|gms|gram|grams|ml|milliliter|milliliters)\b/i
+  );
+
+  if (!portionMatch) {
+    return undefined;
+  }
+
+  const portion = Number(portionMatch[1]);
+
+  if (
+    !Number.isFinite(portion) ||
+    portion <= 0 ||
+    portion > MAX_REASONABLE_PORTION_GRAMS
+  ) {
+    return undefined;
+  }
+
+  return Math.round(portion);
+}
+
+function roundMacro(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function normalizeAssumptions(
+  assumptions: string[] | undefined,
+  context: { description?: string; portionGrams?: number }
+) {
+  const normalized = (assumptions ?? [])
+    .map((assumption) => assumption.trim())
+    .filter(Boolean)
+    .slice(0, 15);
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const fallback = [];
+
+  if (context.description?.trim()) {
+    fallback.push(`Estimated from food details: ${context.description.trim()}`);
+  }
+
+  if (typeof context.portionGrams === "number") {
+    fallback.push(`Used the supplied portion: ${context.portionGrams} g.`);
+  }
+
+  return fallback.length > 0
+    ? fallback
+    : ["Estimated from the meal photo and available details."];
+}
+
+function shouldTryDescriptionFallback(caught: unknown, description?: string) {
+  if (!hasUsableFoodDescription(description)) {
+    return false;
+  }
+
+  if (NoObjectGeneratedError.isInstance(caught)) {
+    return true;
+  }
+
+  if (NoOutputGeneratedError.isInstance(caught) || RetryError.isInstance(caught)) {
+    return true;
+  }
+
+  if (caught instanceof ConvexError) {
+    return true;
+  }
+
+  if (APICallError.isInstance(caught)) {
+    return caught.statusCode !== 429;
+  }
+
+  return false;
+}
+
+function hasUsableFoodDescription(description?: string) {
+  const normalized = description?.trim();
+
+  return Boolean(
+    normalized &&
+      normalized.length >= 2 &&
+      /[a-z0-9]/i.test(normalized) &&
+      !NON_FOOD_DESCRIPTION_PATTERN.test(normalized)
+  );
+}
+
+function getErrorSummary(error: unknown): ErrorSummary {
+  if (NoObjectGeneratedError.isInstance(error)) {
+    return {
+      name: "NoObjectGeneratedError",
+      finishReason: error.finishReason,
+      text: error.text?.slice(0, 240),
+    };
+  }
+
+  if (NoOutputGeneratedError.isInstance(error)) {
+    return {
+      name: "NoOutputGeneratedError",
+      message: error.message,
+    };
+  }
+
+  if (RetryError.isInstance(error)) {
+    return {
+      name: "RetryError",
+      reason: error.reason,
+      message: error.message,
+      lastError: getErrorSummary(error.lastError),
+    };
+  }
+
+  if (APICallError.isInstance(error)) {
+    return {
+      name: "APICallError",
+      statusCode: error.statusCode,
+      message: error.message,
+    };
+  }
+
+  return error instanceof Error
+    ? { name: error.name, message: error.message }
+    : { message: String(error) };
 }
 
 function refineFollowUpQuestion(

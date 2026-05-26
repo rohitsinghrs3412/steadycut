@@ -1,25 +1,6 @@
 import { query } from "./_generated/server";
 import { getUserId } from "./lib/auth";
-
-function isFailedMealEstimate(meal: {
-  foodName: string;
-  calories: number;
-  confidence: number;
-  status?: "estimating" | "ready";
-}) {
-  if (meal.status === "estimating") {
-    return false;
-  }
-
-  const foodName = meal.foodName.trim().toLowerCase();
-
-  return (
-    meal.calories <= 0 ||
-    meal.confidence <= 0 ||
-    foodName === "could not analyze meal" ||
-    foodName === "gemini setup needed"
-  );
-}
+import { getMealItems, isFailedMealEstimate } from "./mealLogs";
 
 export const getDashboard = query({
   args: {},
@@ -53,56 +34,28 @@ export const getDashboard = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(30);
+    const hydrationLogs = await ctx.db
+      .query("hydrationLogs")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(90);
 
     return {
       profile,
       habits,
       checkIns,
       coachMessage: coachMessages[0] ?? null,
-    mealLogs: mealLogs
-        .filter((meal) => !isFailedMealEstimate(meal))
+      mealLogs: mealLogs
+        .filter((meal) => !isFailedMealEstimate(meal, Date.now()))
         .slice(0, 30)
         .map((meal) => ({
           ...meal,
           items: getMealItems(meal),
         })),
       scaleLogs,
+      hydrationLogs,
     };
   },
 });
 
-function getMealItems(meal: {
-  foodName: string;
-  calories: number;
-  proteinGrams?: number;
-  carbsGrams?: number;
-  fatGrams?: number;
-  portionGrams?: number;
-  items?: Array<{
-    name: string;
-    calories: number;
-    proteinGrams?: number;
-    carbsGrams?: number;
-    fatGrams?: number;
-    portionGrams?: number;
-  }>;
-}) {
-  if (meal.items) {
-    return meal.items;
-  }
 
-  if (meal.calories <= 0) {
-    return [];
-  }
-
-  return [
-    {
-      name: meal.foodName,
-      calories: meal.calories,
-      proteinGrams: meal.proteinGrams,
-      carbsGrams: meal.carbsGrams,
-      fatGrams: meal.fatGrams,
-      portionGrams: meal.portionGrams,
-    },
-  ];
-}

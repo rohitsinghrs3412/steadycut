@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -20,9 +21,6 @@ import {
   TrendingDown,
   Trash2,
   Utensils,
-  Dumbbell,
-  Footprints,
-  Waves,
   Smile,
   Meh,
   Frown,
@@ -48,8 +46,14 @@ import {
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { AppPageShell } from "@/components/steadycut/app-page-shell";
-import { DemoCaloriePhotoCard } from "@/components/steadycut/dashboard-screen";
+import { DemoCaloriePhotoCard } from "@/components/steadycut/demo-calorie-photo-card";
 import { useDashboardQuery } from "@/components/steadycut/dashboard-query-provider";
+import {
+  habitColorClass,
+  habitColorOptions,
+  habitIconOptions,
+  habitIcons,
+} from "@/components/steadycut/habit-presentation";
 import { PhotoLoggingWorkspace } from "@/components/steadycut/photo-logging-workspace";
 import { ProfileSettingsPanel } from "@/components/steadycut/profile-settings-panel";
 import { AppearanceSettingsPanel } from "@/components/steadycut/theme-controls";
@@ -84,10 +88,15 @@ import {
   DashboardData,
   formatDisplayDate,
   formatShortDate,
+  formatWeight,
+  formatWeeklyTrendSpeed,
   getCalorieStats,
   getDashboardStats,
+  getWeightGoalProgress,
+  getWeightGoalSummary,
   Habit,
   HabitIconKey,
+  HydrationLog,
   MealLog,
   MealType,
   moodOptions,
@@ -98,7 +107,7 @@ import {
 } from "@/lib/steadycut";
 import { cn } from "@/lib/utils";
 
-type AppMode = "demo" | "live";
+type AppMode = "demo" | "live" | "setup";
 
 type SectionProps = {
   mode: AppMode;
@@ -106,36 +115,30 @@ type SectionProps = {
   vapidPublicKey?: string;
 };
 
-const habitIcons: Record<HabitIconKey, typeof Utensils> = {
-  utensils: Utensils,
-  dumbbell: Dumbbell,
-  droplet: Waves,
-  footprints: Footprints,
-};
-
-const habitIconOptions: Array<{ value: HabitIconKey; label: string }> = [
-  { value: "utensils", label: "Food" },
-  { value: "dumbbell", label: "Strength" },
-  { value: "droplet", label: "Hydration" },
-  { value: "footprints", label: "Steps" },
-];
-
-const habitColorOptions: Array<{ value: Habit["color"]; label: string }> = [
-  { value: "green", label: "Green" },
-  { value: "blue", label: "Blue" },
-  { value: "amber", label: "Amber" },
-  { value: "violet", label: "Violet" },
-];
-
-const habitColorClass: Record<Habit["color"], string> = {
-  green: "bg-primary text-primary-foreground",
-  blue: "bg-chart-1 text-white",
-  amber: "bg-chart-3 text-foreground",
-  violet: "bg-chart-5 text-white",
-};
+function SetupOnlySection({
+  missingItems,
+  title,
+}: {
+  missingItems: string[];
+  title: string;
+}) {
+  return (
+    <AppPageShell
+      rightLabel="Setup required"
+      subtitle="Live mode is enabled, but private app services are incomplete."
+      title={title}
+    >
+      <SetupAlert missingItems={missingItems} />
+    </AppPageShell>
+  );
+}
 
 export function CheckInsSectionPage({ mode, missingItems }: SectionProps) {
-  if (mode !== "live") {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Check-ins" />;
+  }
+
+  if (mode === "demo") {
     return <DemoCheckInsSection missingItems={missingItems} />;
   }
 
@@ -143,7 +146,11 @@ export function CheckInsSectionPage({ mode, missingItems }: SectionProps) {
 }
 
 export function CoachSectionPage({ mode, missingItems }: SectionProps) {
-  if (mode !== "live") {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Food" />;
+  }
+
+  if (mode === "demo") {
     return <DemoFoodSection missingItems={missingItems} />;
   }
 
@@ -167,7 +174,11 @@ export function CoachSectionPage({ mode, missingItems }: SectionProps) {
 }
 
 export function ProgressSectionPage({ mode, missingItems }: SectionProps) {
-  if (mode !== "live") {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Progress" />;
+  }
+
+  if (mode === "demo") {
     return <DemoProgressSection missingItems={missingItems} />;
   }
 
@@ -175,7 +186,11 @@ export function ProgressSectionPage({ mode, missingItems }: SectionProps) {
 }
 
 export function HabitsSectionPage({ mode, missingItems }: SectionProps) {
-  if (mode !== "live") {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Habits" />;
+  }
+
+  if (mode === "demo") {
     return <DemoHabitsSection missingItems={missingItems} />;
   }
 
@@ -297,16 +312,7 @@ export function StaticSectionPage({
 }) {
   return (
     <AppPageShell subtitle={subtitle} title={title}>
-      {missingItems.length > 0 ? (
-        <Alert className="border-dashed">
-          <AlertTriangle />
-          <AlertTitle>Setup still needed</AlertTitle>
-          <AlertDescription>
-            Missing:{" "}
-            <span className="font-mono text-xs">{missingItems.join(", ")}</span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <SetupAlert missingItems={missingItems} />
       <Card>
         <CardContent className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center">
           <div className="flex size-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -325,6 +331,10 @@ export function StaticSectionPage({
 }
 
 export function InsightsSectionPage({ mode, missingItems }: SectionProps) {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Insights" />;
+  }
+
   return (
     <StaticSectionPage
       icon={Lightbulb}
@@ -336,7 +346,11 @@ export function InsightsSectionPage({ mode, missingItems }: SectionProps) {
 }
 
 export function GoalsSectionPage({ mode, missingItems }: SectionProps) {
-  if (mode !== "live") {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Goals" />;
+  }
+
+  if (mode === "demo") {
     return <DemoGoalsSection missingItems={missingItems} />;
   }
 
@@ -402,18 +416,9 @@ function GoalsOverview({
       subtitle="Your calorie budget, target weight, and current distance to goal."
       title="Goals"
     >
-      {missingItems.length > 0 ? (
-        <Alert className="border-dashed">
-          <AlertTriangle />
-          <AlertTitle>Setup still needed</AlertTitle>
-          <AlertDescription>
-            Missing:{" "}
-            <span className="font-mono text-xs">{missingItems.join(", ")}</span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <SetupAlert missingItems={missingItems} />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard
           icon={Flame}
           label="Daily calorie goal"
@@ -442,7 +447,7 @@ function GoalsOverview({
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
         <Card>
           <CardHeader>
             <CardTitle>Weight goal progress</CardTitle>
@@ -506,7 +511,7 @@ function GoalsOverview({
         <CardHeader>
           <CardTitle>Simple operating targets</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+        <CardContent className="grid gap-4 grid-cols-1 sm:grid-cols-3">
           <GoalMeta
             label="This week"
             value={`${stats.checkInsThisWeek} / 7 check-ins`}
@@ -527,7 +532,11 @@ export function SettingsSectionPage({
   missingItems,
   vapidPublicKey = "",
 }: SectionProps) {
-  if (mode !== "live") {
+  if (mode === "setup") {
+    return <SetupOnlySection missingItems={missingItems} title="Settings" />;
+  }
+
+  if (mode === "demo") {
     return <DemoSettingsSection missingItems={missingItems} />;
   }
 
@@ -549,31 +558,26 @@ function DemoSettingsSection({ missingItems }: { missingItems: string[] }) {
       subtitle="Height, weight, ancestry, and calorie target."
       title="Settings"
     >
-      {missingItems.length > 0 ? (
-        <Alert className="border-dashed">
-          <AlertTriangle />
-          <AlertTitle>Setup still needed</AlertTitle>
-          <AlertDescription>
-            Missing:{" "}
-            <span className="font-mono text-xs">{missingItems.join(", ")}</span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <div className="flex max-w-3xl flex-col gap-4">
-        <AppearanceSettingsPanel />
-        <ProfileSettingsPanel
-          latestWeightKg={75.2}
-          onSaveProfile={saveProfile}
-          onSaveWeight={saveWeight}
-          profile={{
-            displayName: "Rohit",
-            heightCm: 174,
-            sex: "male",
-            ancestry: "south-asian",
-            targetCalories: 1800,
-            targetWeightKg: 72,
-          }}
-        />
+      <SetupAlert missingItems={missingItems} />
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <ProfileSettingsPanel
+            latestWeightKg={75.2}
+            onSaveProfile={saveProfile}
+            onSaveWeight={saveWeight}
+            profile={{
+              displayName: "Rohit",
+              heightCm: 174,
+              sex: "male",
+              ancestry: "south-asian",
+              targetCalories: 1800,
+              targetWeightKg: 72,
+            }}
+          />
+        </div>
+        <div className="flex flex-col gap-6">
+          <AppearanceSettingsPanel />
+        </div>
       </div>
     </AppPageShell>
   );
@@ -613,22 +617,30 @@ function LiveSettingsSection({ vapidPublicKey }: { vapidPublicKey: string }) {
       subtitle="Height, weight, ancestry, and calorie target."
       title="Settings"
     >
-      <div className="flex max-w-3xl flex-col gap-4">
-        <AppearanceSettingsPanel />
-        <DailyReminderPanel vapidPublicKey={vapidPublicKey} />
-        <ProfileSettingsPanel
-          latestWeightKg={stats.latest?.weight}
-          onSaveProfile={saveProfile}
-          onSaveWeight={saveWeight}
-          profile={data.profile}
-        />
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <ProfileSettingsPanel
+            latestWeightKg={stats.latest?.weight}
+            onSaveProfile={saveProfile}
+            onSaveWeight={saveWeight}
+            profile={data.profile}
+          />
+        </div>
+        <div className="flex flex-col gap-6">
+          <AppearanceSettingsPanel />
+          <DailyReminderPanel vapidPublicKey={vapidPublicKey} />
+        </div>
       </div>
     </AppPageShell>
   );
 }
 
 function DailyReminderPanel({ vapidPublicKey }: { vapidPublicKey: string }) {
-  const subscription = useQuery(api.pushNotifications.getCurrentSubscription);
+  const { isLoaded, isSignedIn } = useAuth();
+  const subscription = useQuery(
+    api.pushNotifications.getCurrentSubscription,
+    isLoaded && isSignedIn ? {} : "skip"
+  );
   const upsertSubscription = useMutation(api.pushNotifications.upsertSubscription);
   const deleteSubscription = useMutation(api.pushNotifications.deleteSubscription);
   const updateReminderHour = useMutation(api.pushNotifications.updateReminderHour);
@@ -1024,7 +1036,7 @@ function ProgressOverview({
       <SetupAlert missingItems={missingItems} />
 
       {/* 2x2 Grid of Stat Cards for Mobile */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:gap-6 lg:grid-cols-4">
         <StatCard
           icon={Scale}
           label="Latest weight"
@@ -1035,7 +1047,7 @@ function ProgressOverview({
           icon={TrendingDown}
           label="7D EWMA Trend"
           value={latestTrend ? `${latestTrend.toFixed(1)} kg` : "--"}
-          subtext={formatWeeklyTrendSpeed(weeklySpeed)}
+          subtext={formatWeeklyTrendSpeed(weeklySpeed, " trend speed")}
         />
         <StatCard
           icon={Flame}
@@ -1051,298 +1063,294 @@ function ProgressOverview({
         />
       </div>
 
-      {/* Interactive Timeframe Weight Chart */}
-      <Card className="glass-card border-white/10 dark:border-white/5 overflow-hidden">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-4">
-          <div>
-            <CardTitle className="text-base font-semibold">Weight Trend Analysis</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Plotting raw weight vs 7-day exponentially weighted trend</p>
-          </div>
-          
-          {/* Timeframe buttons */}
-          <div className="flex bg-muted/60 p-0.5 rounded-lg w-fit">
-            {(['7d', '30d', '90d', 'all'] as const).map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={cn(
-                  "px-3 py-1 text-xs font-medium rounded-md transition-all uppercase",
-                  timeframe === tf
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
-        </CardHeader>
-        <CardContent className="px-1 sm:px-6">
-          <ChartContainer
-            className="w-full h-[220px] min-h-[220px]"
-            config={chartConfig}
-          >
-            <AreaChart data={trendData} margin={{ left: -10, right: 12, top: 10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="progressColorWeight" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="progressColorTrend" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted/20" />
-              <XAxis
-                axisLine={false}
-                dataKey="label"
-                tickLine={false}
-                tickMargin={8}
-                fontSize={10}
-                className="fill-muted-foreground"
-              />
-              <YAxis
-                axisLine={false}
-                domain={["dataMin - 1.5", "dataMax + 1.5"]}
-                tickLine={false}
-                tickMargin={8}
-                fontSize={10}
-                width={30}
-                className="fill-muted-foreground"
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    indicator="dot"
-                    labelFormatter={(value, payload) => {
-                      const item = payload[0]?.payload as { date: string } | undefined;
-                      return item ? formatDisplayDate(item.date) : value;
-                    }}
-                  />
-                }
-                cursor={false}
-              />
-              <Area
-                dataKey="weight"
-                fill="url(#progressColorWeight)"
-                name="Weight"
-                stroke="var(--chart-1)"
-                strokeWidth={1.5}
-                strokeDasharray="3 3"
-                type="monotone"
-              />
-              <Area
-                dataKey="trendWeight"
-                fill="url(#progressColorTrend)"
-                name="7-day trend"
-                stroke="var(--primary)"
-                strokeWidth={2.5}
-                type="monotone"
-              />
-            </AreaChart>
-          </ChartContainer>
-        </CardContent>
-      </Card>
-
-      {/* Weekly Check-in Loop Grid */}
-      <Card className="glass-card border-white/10 dark:border-white/5">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Weekly Consistency Loop</CardTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">Click any missed day to log check-in details</p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-7 gap-2">
-            {weekDays.map(({ dateKey, dayLabel, dayNum, checkIn }) => {
-              const theme = checkIn ? moodTheme[checkIn.mood as keyof typeof moodTheme] : null;
-              const MoodIcon = theme ? theme.icon : null;
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* Left Column (Charts and raw logs) */}
+        <div className="flex flex-col gap-6 min-w-0">
+          {/* Interactive Timeframe Weight Chart */}
+          <Card className="glass-card border-white/10 dark:border-white/5 overflow-hidden">
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-4">
+              <div>
+                <CardTitle className="text-base font-semibold">Weight Trend Analysis</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Plotting raw weight vs 7-day exponentially weighted trend</p>
+              </div>
               
-              return (
-                <div key={dateKey} className="flex flex-col items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">{dayLabel}</span>
-                  
-                  {checkIn ? (
-                    <div
-                      title={`Logged: ${checkIn.weight.toFixed(1)} kg (${theme?.label})`}
-                      className={cn(
-                        "flex size-10 items-center justify-center rounded-full border text-xs font-semibold shadow-sm transition-all duration-300 hover:scale-105",
-                        theme?.bg
-                      )}
-                    >
-                      {MoodIcon && <MoodIcon className="size-4" />}
-                    </div>
-                  ) : (
-                    <Link
-                      href="/check-ins"
-                      title="Log this missed day"
-                      className="flex size-10 items-center justify-center rounded-full border border-dashed text-muted-foreground/50 hover:text-primary hover:border-primary hover:bg-primary/5 transition-all duration-300 hover:scale-105"
-                    >
-                      <Plus className="size-4" />
-                    </Link>
-                  )}
-                  
-                  <span className="text-xs font-mono font-medium text-foreground">{dayNum}</span>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Habits & Calorie Breakdown Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Habits Consistency Card */}
-        <Card className="glass-card border-white/10 dark:border-white/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <div>
-              <CardTitle className="text-base font-semibold">Habit Consistency</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Success rate over last 30 check-ins</p>
-            </div>
-            <Button asChild size="sm" variant="ghost">
-              <Link href="/habits">Edit Habits</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {habitConsistency.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-6 text-center">
-                Log check-ins to view habit consistency.
+              {/* Timeframe buttons */}
+              <div className="flex bg-muted/60 p-0.5 rounded-lg w-fit">
+                {(['7d', '30d', '90d', 'all'] as const).map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-md transition-all uppercase",
+                      timeframe === tf
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {tf}
+                  </button>
+                ))}
               </div>
-            ) : (
-              habitConsistency.map((habit) => {
-                const Icon = habitIcons[habit.iconKey];
-                
-                return (
-                  <div key={habit.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2 font-medium">
-                        <div className={cn("p-1.5 rounded bg-primary/10 text-primary", habitColorClass[habit.color])}>
-                          <Icon className="size-3.5" />
+            </CardHeader>
+            <CardContent className="px-1 sm:px-6">
+              <ChartContainer
+                className="w-full h-[240px] sm:h-[300px] min-h-[240px]"
+                config={chartConfig}
+              >
+                <AreaChart data={trendData} margin={{ left: -10, right: 12, top: 10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="progressColorWeight" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="progressColorTrend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted/20" />
+                  <XAxis
+                    axisLine={false}
+                    dataKey="label"
+                    tickLine={false}
+                    tickMargin={8}
+                    fontSize={10}
+                    className="fill-muted-foreground"
+                  />
+                  <YAxis
+                    axisLine={false}
+                    domain={["dataMin - 1.5", "dataMax + 1.5"]}
+                    tickLine={false}
+                    tickMargin={8}
+                    fontSize={10}
+                    width={30}
+                    className="fill-muted-foreground"
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        indicator="dot"
+                        labelFormatter={(value, payload) => {
+                          const item = payload[0]?.payload as { date: string } | undefined;
+                          return item ? formatDisplayDate(item.date) : value;
+                        }}
+                      />
+                    }
+                    cursor={false}
+                  />
+                  <Area
+                    dataKey="weight"
+                    fill="url(#progressColorWeight)"
+                    name="Weight"
+                    stroke="var(--chart-1)"
+                    strokeWidth={1.5}
+                    strokeDasharray="3 3"
+                    type="monotone"
+                  />
+                  <Area
+                    dataKey="trendWeight"
+                    fill="url(#progressColorTrend)"
+                    name="7-day trend"
+                    stroke="var(--primary)"
+                    strokeWidth={2.5}
+                    type="monotone"
+                  />
+                </AreaChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          {/* Raw logs list */}
+          <RecentCheckInsList checkIns={stats.sortedCheckIns.slice(-10).reverse()} />
+        </div>
+
+        {/* Right Column (Consistency statistics & Milestones) */}
+        <div className="flex flex-col gap-6">
+          {/* Weekly Check-in Loop Grid */}
+          <Card className="glass-card border-white/10 dark:border-white/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Weekly Consistency Loop</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Click any missed day to log check-in details</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-7 gap-2">
+                {weekDays.map(({ dateKey, dayLabel, dayNum, checkIn }) => {
+                  const theme = checkIn ? moodTheme[checkIn.mood as keyof typeof moodTheme] : null;
+                  const MoodIcon = theme ? theme.icon : null;
+                  
+                  return (
+                    <div key={dateKey} className="flex flex-col items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">{dayLabel}</span>
+                      
+                      {checkIn ? (
+                        <div
+                          title={`Logged: ${checkIn.weight.toFixed(1)} kg (${theme?.label})`}
+                          className={cn(
+                            "flex size-10 items-center justify-center rounded-full border text-xs font-semibold shadow-sm transition-all duration-300 hover:scale-105",
+                            theme?.bg
+                          )}
+                        >
+                          {MoodIcon && <MoodIcon className="size-4" />}
                         </div>
-                        <span className="truncate max-w-[180px] sm:max-w-[240px]">{habit.name}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground font-mono">
-                        {habit.rate}% ({habit.completedCount}/{habit.total})
-                      </span>
+                      ) : (
+                        <Link
+                          href="/check-ins"
+                          title="Log this missed day"
+                          className="flex size-10 items-center justify-center rounded-full border border-dashed text-muted-foreground/50 hover:text-primary hover:border-primary hover:bg-primary/5 transition-all duration-300 hover:scale-105"
+                        >
+                          <Plus className="size-4" />
+                        </Link>
+                      )}
+                      
+                      <span className="text-xs font-mono font-medium text-foreground">{dayNum}</span>
                     </div>
-                    <Progress value={habit.rate} className="h-1.5" />
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Nutrition Averages (Meal logs summary) */}
-        <Card className="glass-card border-white/10 dark:border-white/5">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Nutrition & Calorie Consistency</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Average intake across logged days</p>
-          </CardHeader>
-          <CardContent>
-            {!mealAverages ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                <Utensils className="size-8 text-muted-foreground/45" />
-                <p className="text-sm text-muted-foreground">No meal logs logged yet.</p>
-                <Button asChild size="sm" variant="outline" className="mt-2">
-                  <Link href="/coach">Log Your First Meal</Link>
-                </Button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="space-y-5">
-                {/* Calories Budget Card */}
-                <div className="p-3.5 rounded-lg border bg-muted/30">
-                  <div className="flex justify-between items-baseline">
-                    <div>
-                      <div className="text-2xl font-bold tracking-tight">{mealAverages.avgCalories} <span className="text-xs font-normal text-muted-foreground">kcal / day avg</span></div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Target: {mealAverages.targetCalories} kcal</div>
-                    </div>
-                    <Badge variant={mealAverages.avgCalories <= mealAverages.targetCalories ? "default" : "secondary"}>
-                      {mealAverages.complianceRate}% days on track
-                    </Badge>
-                  </div>
+            </CardContent>
+          </Card>
+
+          {/* Habits Consistency Card */}
+          <Card className="glass-card border-white/10 dark:border-white/5">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-semibold">Habit Consistency</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Success rate over last 30 check-ins</p>
+              </div>
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/habits">Edit Habits</Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {habitConsistency.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-6 text-center">
+                  Log check-ins to view habit consistency.
+                </div>
+              ) : (
+                habitConsistency.map((habit) => {
+                  const Icon = habitIcons[habit.iconKey];
                   
-                  {/* Calorie compliance progress */}
-                  <div className="mt-3 space-y-1">
-                    <Progress value={Math.min((mealAverages.avgCalories / mealAverages.targetCalories) * 100, 100)} className="h-2" />
-                    <div className="text-[10px] text-muted-foreground text-right">
-                      {mealAverages.avgCalories <= mealAverages.targetCalories 
-                        ? `${mealAverages.targetCalories - mealAverages.avgCalories} kcal under budget average`
-                        : `${mealAverages.avgCalories - mealAverages.targetCalories} kcal over budget average`}
+                  return (
+                    <div key={habit.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 font-medium">
+                          <div className={cn("p-1.5 rounded bg-primary/10 text-primary", habitColorClass[habit.color])}>
+                            <Icon className="size-3.5" />
+                          </div>
+                          <span className="truncate max-w-[180px] sm:max-w-[240px]">{habit.name}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {habit.rate}% ({habit.completedCount}/{habit.total})
+                        </span>
+                      </div>
+                      <Progress value={habit.rate} className="h-1.5" />
+                    </div>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Nutrition Averages (Meal logs summary) */}
+          <Card className="glass-card border-white/10 dark:border-white/5">
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">Nutrition & Calorie Consistency</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Average intake across logged days</p>
+            </CardHeader>
+            <CardContent>
+              {!mealAverages ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+                  <Utensils className="size-8 text-muted-foreground/45" />
+                  <p className="text-sm text-muted-foreground">No meal logs logged yet.</p>
+                  <Button asChild size="sm" variant="outline" className="mt-2">
+                    <Link href="/coach">Log Your First Meal</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* Calories Budget Card */}
+                  <div className="p-3.5 rounded-lg border bg-muted/30">
+                    <div className="flex justify-between items-baseline">
+                      <div>
+                        <div className="text-2xl font-bold tracking-tight">{mealAverages.avgCalories} <span className="text-xs font-normal text-muted-foreground">kcal / day avg</span></div>
+                        <div className="text-xs text-muted-foreground mt-0.5">Target: {mealAverages.targetCalories} kcal</div>
+                      </div>
+                      <Badge variant={mealAverages.avgCalories <= mealAverages.targetCalories ? "default" : "secondary"}>
+                        {mealAverages.complianceRate}% days on track
+                      </Badge>
+                    </div>
+                    
+                    {/* Calorie compliance progress */}
+                    <div className="mt-3 space-y-1">
+                      <Progress value={Math.min((mealAverages.avgCalories / mealAverages.targetCalories) * 100, 100)} className="h-2" />
+                      <div className="text-[10px] text-muted-foreground text-right">
+                        {mealAverages.avgCalories <= mealAverages.targetCalories 
+                          ? `${mealAverages.targetCalories - mealAverages.avgCalories} kcal under budget average`
+                          : `${mealAverages.avgCalories - mealAverages.targetCalories} kcal over budget average`}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Macro Breakdown */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2.5 rounded-lg bg-secondary/60">
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase">Protein</div>
-                    <div className="text-base font-bold font-mono mt-1 text-chart-1">{mealAverages.avgProtein}g</div>
+                  {/* Macro Breakdown */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2.5 rounded-lg bg-secondary/60">
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase">Protein</div>
+                      <div className="text-base font-bold font-mono mt-1 text-chart-1">{mealAverages.avgProtein}g</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-secondary/60">
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase">Carbs</div>
+                      <div className="text-base font-bold font-mono mt-1 text-chart-3">{mealAverages.avgCarbs}g</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-secondary/60">
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase">Fat</div>
+                      <div className="text-base font-bold font-mono mt-1 text-chart-5">{mealAverages.avgFat}g</div>
+                    </div>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-secondary/60">
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase">Carbs</div>
-                    <div className="text-base font-bold font-mono mt-1 text-chart-3">{mealAverages.avgCarbs}g</div>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-secondary/60">
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase">Fat</div>
-                    <div className="text-base font-bold font-mono mt-1 text-chart-5">{mealAverages.avgFat}g</div>
+
+                  <div className="text-[11px] text-center text-muted-foreground italic">
+                    Aggregated from {mealAverages.totalDays} days of food diary photography.
                   </div>
                 </div>
+              )}
+            </CardContent>
+          </Card>
 
-                <div className="text-[11px] text-center text-muted-foreground italic">
-                  Aggregated from {mealAverages.totalDays} days of food diary photography.
+          {/* Consistency Milestones / Personal Achievements */}
+          <Card className="glass-card border-white/10 dark:border-white/5 bg-gradient-to-br from-primary/5 via-transparent to-chart-1/5">
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Award className="size-5 text-primary" />
+                Milestones & Achievements
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-card/50 border border-white/5">
+                <Activity className="size-5 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-semibold">Total Weight Change</div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {stats.latest && stats.first 
+                      ? `You have shed a total of ${Math.abs(rawDelta).toFixed(1)} kg since starting.`
+                      : "Start check-ins to trace overall weight changes."}
+                  </p>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-card/50 border border-white/5">
+                <Flame className="size-5 text-orange-500 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-semibold">Consistency Records</div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Longest consecutive logging streak is <strong className="text-foreground">{longestStreak} days</strong>.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* Consistency Milestones / Personal Achievements */}
-      <Card className="glass-card border-white/10 dark:border-white/5 bg-gradient-to-br from-primary/5 via-transparent to-chart-1/5">
-        <CardHeader>
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Award className="size-5 text-primary" />
-            Milestones & Achievements
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-card/50 border border-white/5">
-            <Activity className="size-5 text-emerald-500 shrink-0 mt-0.5" />
-            <div>
-              <div className="text-sm font-semibold">Total Weight Change</div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {stats.latest && stats.first 
-                  ? `You have shed a total of ${Math.abs(rawDelta).toFixed(1)} kg since starting.`
-                  : "Start check-ins to trace overall weight changes."}
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-card/50 border border-white/5">
-            <Flame className="size-5 text-orange-500 shrink-0 mt-0.5" />
-            <div>
-              <div className="text-sm font-semibold">Consistency Records</div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Longest consecutive logging streak is <strong className="text-foreground">{longestStreak} days</strong>.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Raw logs list */}
-      <RecentCheckInsList checkIns={stats.sortedCheckIns.slice(-10).reverse()} />
     </AppPageShell>
   );
-}
-
-function formatWeeklyTrendSpeed(value: number | null) {
-  if (value == null) {
-    return "-- / wk";
-  }
-
-  const prefix = value <= 0 ? "-" : "+";
-  return `${prefix}${Math.abs(value).toFixed(2)} kg/wk trend speed`;
 }
 
 function LiveHabitsSection() {
@@ -1431,7 +1439,7 @@ function HabitsOverview({
           />
         ) : null}
       </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {stats.activeHabits.map((habit, index) => {
           const Icon = habitIcons[habit.iconKey];
 
@@ -1587,7 +1595,7 @@ function HabitEditorSheet({
           </span>
         </Button>
       </SheetTrigger>
-      <SheetContent className="max-h-[88svh] overflow-y-auto p-0" side="bottom">
+      <SheetContent className="max-h-[88svh] overflow-y-auto p-0 sm:max-w-xl sm:mx-auto sm:left-1/2 sm:-translate-x-1/2 sm:rounded-t-xl sm:border-x" side="bottom">
         <SheetHeader className="border-b pr-14">
           <SheetTitle>{habit ? "Edit habit" : "Add habit"}</SheetTitle>
           <SheetDescription>
@@ -1852,59 +1860,6 @@ function GoalMeta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatWeight(weight?: number) {
-  return weight ? `${weight.toFixed(1)} kg` : "--";
-}
-
-function getWeightGoalProgress(
-  startWeight?: number,
-  currentWeight?: number,
-  targetWeight?: number
-) {
-  if (startWeight == null || currentWeight == null || targetWeight == null) {
-    return null;
-  }
-
-  const totalDistance = startWeight - targetWeight;
-
-  if (totalDistance <= 0) {
-    return currentWeight <= targetWeight ? 100 : 0;
-  }
-
-  return Math.max(
-    0,
-    Math.min(((startWeight - currentWeight) / totalDistance) * 100, 100)
-  );
-}
-
-function getWeightGoalSummary(
-  startWeight?: number,
-  currentWeight?: number,
-  targetWeight?: number
-) {
-  if (targetWeight == null) {
-    return "Set a goal weight in settings.";
-  }
-
-  if (currentWeight == null || startWeight == null) {
-    return "Log a weight check-in to start progress tracking.";
-  }
-
-  const remaining = currentWeight - targetWeight;
-
-  if (remaining <= 0) {
-    return "You are at or below your goal weight.";
-  }
-
-  const lost = startWeight - currentWeight;
-
-  if (lost <= 0) {
-    return `${remaining.toFixed(1)} kg left from your current weight.`;
-  }
-
-  return `${lost.toFixed(1)} kg down, ${remaining.toFixed(1)} kg left.`;
-}
-
 function SectionSkeleton({ title }: { title: string }) {
   return (
     <AppPageShell subtitle="Loading your private data." title={title}>
@@ -1974,6 +1929,18 @@ function mapDashboardData(dashboard: {
     note?: string;
     createdAt: number;
   }>;
+  hydrationLogs?: Array<{
+    _id: Id<"hydrationLogs">;
+    date: string;
+    photoId: Id<"_storage">;
+    beverageName: string;
+    containerName: string;
+    volumeMl: number;
+    confidence: number;
+    assumptions: HydrationLog["assumptions"];
+    createdAt: number;
+    updatedAt: number;
+  }>;
 }): DashboardData {
   return {
     profile: dashboard.profile
@@ -1989,7 +1956,7 @@ function mapDashboardData(dashboard: {
           updatedAt: dashboard.profile.updatedAt,
         }
       : null,
-    habits: dashboard.habits.map((habit) => ({
+    habits: (dashboard.habits ?? []).map((habit) => ({
       id: habit._id,
       name: habit.name,
       iconKey: habit.iconKey,
@@ -1998,7 +1965,7 @@ function mapDashboardData(dashboard: {
       active: habit.active,
       sortOrder: habit.sortOrder,
     })),
-    checkIns: dashboard.checkIns.map((checkIn) => ({
+    checkIns: (dashboard.checkIns ?? []).map((checkIn) => ({
       id: checkIn._id,
       date: checkIn.date,
       weight: checkIn.weight,
@@ -2039,6 +2006,18 @@ function mapDashboardData(dashboard: {
       needsManualReview: log.needsManualReview,
       note: log.note,
       createdAt: log.createdAt,
+    })),
+    hydrationLogs: dashboard.hydrationLogs?.map((log) => ({
+      id: log._id,
+      date: log.date,
+      photoId: log.photoId,
+      beverageName: log.beverageName,
+      containerName: log.containerName,
+      volumeMl: log.volumeMl,
+      confidence: log.confidence,
+      assumptions: log.assumptions,
+      createdAt: log.createdAt,
+      updatedAt: log.updatedAt,
     })),
   };
 }

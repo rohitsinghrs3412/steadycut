@@ -133,7 +133,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_date", ["userId", "date"]),
+    .index("by_user_date", ["userId", "date"])
+    .index("by_status", ["status"]),
 
   scaleLogs: defineTable({
     userId: v.string(),
@@ -146,6 +147,21 @@ export default defineSchema({
     needsManualReview: v.boolean(),
     note: v.optional(v.string()),
     createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_date", ["userId", "date"]),
+
+  hydrationLogs: defineTable({
+    userId: v.string(),
+    date: v.string(),
+    photoId: v.id("_storage"),
+    beverageName: v.string(),
+    containerName: v.string(),
+    volumeMl: v.number(),
+    confidence: v.number(),
+    assumptions: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"]),

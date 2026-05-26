@@ -12,6 +12,7 @@ import type {
   CheckInInput,
   CoachMessage,
   DashboardData,
+  HydrationLog,
   MealLog,
   MealType,
   ScaleTimeOfDay,
@@ -34,7 +35,7 @@ export function LiveDashboard({ missingItems }: LiveDashboardProps) {
     void ensureDefaultHabits();
   }, [ensureDefaultHabits, ensureProfile]);
 
-  if (!dashboard || dashboard.habits.length === 0) {
+  if (!dashboard || (dashboard.habits ?? []).length === 0) {
     return <AppLoadingPage title="Calories" />;
   }
 
@@ -125,6 +126,18 @@ function mapDashboardData(dashboard: {
     note?: string;
     createdAt: number;
   }>;
+  hydrationLogs: Array<{
+    _id: Id<"hydrationLogs">;
+    date: string;
+    photoId: Id<"_storage">;
+    beverageName: string;
+    containerName: string;
+    volumeMl: number;
+    confidence: number;
+    assumptions: HydrationLog["assumptions"];
+    createdAt: number;
+    updatedAt: number;
+  }>;
 }): DashboardData {
   return {
     profile: dashboard.profile
@@ -140,7 +153,7 @@ function mapDashboardData(dashboard: {
           updatedAt: dashboard.profile.updatedAt,
         }
       : null,
-    habits: dashboard.habits.map((habit) => ({
+    habits: (dashboard.habits ?? []).map((habit) => ({
       id: habit._id,
       name: habit.name,
       iconKey: habit.iconKey,
@@ -149,7 +162,7 @@ function mapDashboardData(dashboard: {
       active: habit.active,
       sortOrder: habit.sortOrder,
     })),
-    checkIns: dashboard.checkIns.map((checkIn) => ({
+    checkIns: (dashboard.checkIns ?? []).map((checkIn) => ({
       id: checkIn._id,
       date: checkIn.date,
       weight: checkIn.weight,
@@ -169,7 +182,7 @@ function mapDashboardData(dashboard: {
           createdAt: dashboard.coachMessage.createdAt,
         }
       : null,
-    mealLogs: dashboard.mealLogs.map((meal) => ({
+    mealLogs: (dashboard.mealLogs ?? []).map((meal) => ({
       id: meal._id,
       date: meal.date,
       mealType: meal.mealType,
@@ -189,7 +202,7 @@ function mapDashboardData(dashboard: {
       createdAt: meal.createdAt,
       updatedAt: meal.updatedAt,
     })),
-    scaleLogs: dashboard.scaleLogs.map((log) => ({
+    scaleLogs: (dashboard.scaleLogs ?? []).map((log) => ({
       id: log._id,
       date: log.date,
       timeOfDay: log.timeOfDay,
@@ -200,6 +213,18 @@ function mapDashboardData(dashboard: {
       needsManualReview: log.needsManualReview,
       note: log.note,
       createdAt: log.createdAt,
+    })),
+    hydrationLogs: (dashboard.hydrationLogs ?? []).map((log) => ({
+      id: log._id,
+      date: log.date,
+      photoId: log.photoId,
+      beverageName: log.beverageName,
+      containerName: log.containerName,
+      volumeMl: log.volumeMl,
+      confidence: log.confidence,
+      assumptions: log.assumptions,
+      createdAt: log.createdAt,
+      updatedAt: log.updatedAt,
     })),
   };
 }

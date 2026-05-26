@@ -1,14 +1,21 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
-
+import { requireAppUser } from "@/lib/app-auth";
 import {
   getMissingSetupItems,
   hasCoreServerConfig,
+  isLiveModeMisconfigured,
   serverConfig,
 } from "@/lib/server-config";
 
 export async function getAppRouteContext() {
   const missingItems = getMissingSetupItems();
+
+  if (isLiveModeMisconfigured) {
+    return {
+      mode: "setup" as const,
+      missingItems,
+      vapidPublicKey: serverConfig.vapidPublicKey,
+    };
+  }
 
   if (!hasCoreServerConfig) {
     return {
@@ -18,11 +25,7 @@ export async function getAppRouteContext() {
     };
   }
 
-  const { userId } = await auth();
-
-  if (!userId) {
-    redirect("/sign-in");
-  }
+  await requireAppUser();
 
   return {
     mode: "live" as const,

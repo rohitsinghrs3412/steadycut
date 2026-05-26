@@ -15,7 +15,6 @@ export const ensureProfile = mutation({
       .unique();
 
     if (existing) {
-      await ctx.db.patch(existing._id, { updatedAt: now });
       return existing._id;
     }
 

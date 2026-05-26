@@ -102,21 +102,33 @@ export const generateDailyCoach = action({
       })) as SavedCoachMessage;
     }
 
-    const { output } = await generateText({
-      model: google("gemini-2.5-flash"),
-      output: Output.object({ schema: coachOutputSchema }),
-      system:
-        "You are a kind but direct weight-loss consistency coach for a private Indian user tracking weight in kg and food in kcal/grams. Give behavioral support only. Do not provide medical advice, diagnoses, extreme dieting instructions, or shame-based language. Keep advice practical, brief, and focused on the next small action.",
-      prompt: `Use this private user data to write today's coaching insight and next action:\n${promptSummary}`,
-    });
+    try {
+      const { output } = await generateText({
+        model: google("gemini-2.5-flash"),
+        output: Output.object({ schema: coachOutputSchema }),
+        system:
+          "You are a kind but direct weight-loss consistency coach for a private Indian user tracking weight in kg and food in kcal/grams. Give behavioral support only. Do not provide medical advice, diagnoses, extreme dieting instructions, or shame-based language. Keep advice practical, brief, and focused on the next small action.",
+        prompt: `Use this private user data to write today's coaching insight and next action:\n${promptSummary}`,
+      });
 
-    return (await ctx.runMutation(anyApi.coach.saveCoachMessage, {
-      userId,
-      date: args.date,
-      promptSummary,
-      insight: output.insight,
-      nextAction: output.nextAction,
-    })) as SavedCoachMessage;
+      return (await ctx.runMutation(anyApi.coach.saveCoachMessage, {
+        userId,
+        date: args.date,
+        promptSummary,
+        insight: output.insight,
+        nextAction: output.nextAction,
+      })) as SavedCoachMessage;
+    } catch (caught) {
+      console.error("Gemini daily coach action error:", caught);
+      return (await ctx.runMutation(anyApi.coach.saveCoachMessage, {
+        userId,
+        date: args.date,
+        promptSummary,
+        insight:
+          "Consistent tracking is the secret to progress. Even on days when the connection is slow, keep focusing on your basic habits like hydration and stepping on the scale.",
+        nextAction: "Protect your consistency today by checking off at least one habit.",
+      })) as SavedCoachMessage;
+    }
   },
 });
 

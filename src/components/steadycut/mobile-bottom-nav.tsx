@@ -6,7 +6,7 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAppProviderConfig } from "@/components/app/root-providers";
-import { DemoCaloriePhotoCard } from "@/components/steadycut/dashboard-screen";
+import { DemoCaloriePhotoCard } from "@/components/steadycut/demo-calorie-photo-card";
 import { PhotoLoggingWorkspace } from "@/components/steadycut/photo-logging-workspace";
 import { Button } from "@/components/ui/button";
 import {
@@ -148,12 +148,12 @@ function QuickLogSheet() {
         <SheetHeader className="border-b pr-14">
           <SheetTitle>Quick log</SheetTitle>
           <SheetDescription>
-            Add food or a scale photo without leaving the daily view.
+            Add food, drink volume, or a scale photo without leaving the daily view.
           </SheetDescription>
         </SheetHeader>
         <div className="p-4">
           {canUseLiveLogging ? (
-            <PhotoLoggingWorkspace compact focus="all" />
+            <PhotoLoggingWorkspace compact focus="all" showRecentLogs={false} />
           ) : (
             <div className="flex flex-col gap-3">
               <DemoCaloriePhotoCard />

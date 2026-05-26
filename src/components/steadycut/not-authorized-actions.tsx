@@ -1,0 +1,21 @@
+"use client";
+
+import { SignOutButton } from "@clerk/nextjs";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
+
+export function NotAuthorizedActions() {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <SignOutButton redirectUrl="/sign-in">
+        <Button className="w-full sm:w-auto" type="button">
+          Sign out
+        </Button>
+      </SignOutButton>
+      <Button asChild variant="outline" className="w-full sm:w-auto">
+        <Link href="/sign-in">Use another account</Link>
+      </Button>
+    </div>
+  );
+}

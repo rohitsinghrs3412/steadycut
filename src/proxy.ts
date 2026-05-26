@@ -1,7 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-import { hasCoreServerConfig } from "@/lib/server-config";
+import {
+  hasCoreServerConfig,
+  isLiveModeMisconfigured,
+} from "@/lib/server-config";
 
 const isProtectedRoute = createRouteMatcher([
   "/dashboard(.*)",
@@ -10,6 +14,7 @@ const isProtectedRoute = createRouteMatcher([
   "/habits(.*)",
   "/insights(.*)",
   "/coach(.*)",
+  "/live-coach(.*)",
   "/goals(.*)",
   "/settings(.*)",
 ]);
@@ -23,7 +28,22 @@ const configuredMiddleware = clerkMiddleware(async (auth, request) => {
 
 export default hasCoreServerConfig
   ? configuredMiddleware
-  : function proxy() {
+  : function proxy(request: NextRequest) {
+      if (isLiveModeMisconfigured) {
+        if (isProtectedRoute(request)) {
+          const url = new URL("/", request.url);
+          url.searchParams.set("setup", "required");
+          return NextResponse.redirect(url);
+        }
+
+        if (request.nextUrl.pathname.startsWith("/api/")) {
+          return NextResponse.json(
+            { error: "Live services are not configured." },
+            { status: 503 }
+          );
+        }
+      }
+
       return NextResponse.next();
     };
 
