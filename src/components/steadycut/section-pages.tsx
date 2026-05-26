@@ -1075,16 +1075,16 @@ function ProgressOverview({
               </div>
               
               {/* Timeframe buttons */}
-              <div className="flex bg-muted/60 p-0.5 rounded-lg w-fit">
+              <div className="flex bg-muted/60 p-1 rounded-lg w-fit border border-border/40">
                 {(['7d', '30d', '90d', 'all'] as const).map((tf) => (
                   <button
                     key={tf}
                     onClick={() => setTimeframe(tf)}
                     className={cn(
-                      "px-3 py-1 text-xs font-medium rounded-md transition-all uppercase",
+                      "px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all uppercase text-center min-w-[38px]",
                       timeframe === tf
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-background text-foreground shadow-sm scale-105"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                     )}
                   >
                     {tf}

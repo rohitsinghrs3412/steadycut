@@ -49,8 +49,8 @@ export function MobileNavButton({ streak = 0 }: { streak?: number }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button className="lg:hidden" size="icon" variant="outline">
-          <Menu />
+        <Button className="lg:hidden h-10 w-10" size="icon" variant="outline">
+          <Menu className="size-5" />
           <span className="sr-only">Open navigation</span>
         </Button>
       </SheetTrigger>

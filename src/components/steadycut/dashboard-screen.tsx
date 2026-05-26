@@ -770,15 +770,17 @@ function HabitsCard({
         </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-lg border bg-card/30">
           {activeHabits.map((habit) => {
             const Icon = habitIcons[habit.iconKey];
             const isComplete = completedHabitIds.includes(habit.id);
 
             return (
-              <div
+              <button
                 key={habit.id}
-                className="flex items-center gap-3 border-b p-3 last:border-b-0"
+                type="button"
+                onClick={() => void onToggleHabit(habit.id, !isComplete)}
+                className="flex w-full items-center gap-3 border-b p-3 last:border-b-0 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
               >
                 <div
                   className={cn(
@@ -788,24 +790,22 @@ function HabitsCard({
                 >
                   <Icon />
                 </div>
-                <div className="min-w-0 flex-1 truncate text-sm font-medium">
+                <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                   {habit.name}
                 </div>
                 <div
                   className={cn(
-                    "flex size-6 items-center justify-center rounded-md border",
+                    "flex size-6 items-center justify-center rounded-md border pointer-events-none",
                     isComplete && "border-primary bg-primary text-primary-foreground"
                   )}
                 >
                   <Checkbox
                     checked={isComplete}
-                    onCheckedChange={(checked) =>
-                      void onToggleHabit(habit.id, checked === true)
-                    }
+                    tabIndex={-1}
                   />
                 </div>
-                <ChevronRight className="text-muted-foreground" />
-              </div>
+                <ChevronRight className="size-4 text-muted-foreground/60 shrink-0" />
+              </button>
             );
           })}
         </div>
@@ -892,20 +892,20 @@ function WeightTrendCard({
           <p className="text-sm text-muted-foreground">7-day EWMA</p>
         </div>
         <div className="text-right flex flex-col items-end gap-3">
-          <div className="flex items-center gap-1 rounded-md bg-muted/60 p-0.5 border border-border/40">
+          <div className="flex items-center gap-1 rounded-lg bg-muted/60 p-1 border border-border/40 w-fit">
             {(["7d", "30d", "90d", "all"] as const).map((r) => (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRange(r)}
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-all duration-200",
+                  "rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-200 uppercase text-center min-w-[38px]",
                   range === r
                     ? "bg-background text-foreground shadow-sm scale-105"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                 )}
               >
-                {r === "all" ? "All" : r.toUpperCase()}
+                {r}
               </button>
             ))}
           </div>

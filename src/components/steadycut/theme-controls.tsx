@@ -36,13 +36,13 @@ export function ThemeIconButton({ className }: { className?: string }) {
       <TooltipTrigger asChild>
         <Button
           aria-label={label}
-          className={className}
+          className={cn("h-10 w-10", className)}
           size="icon"
           type="button"
           variant="outline"
           onClick={toggleTheme}
         >
-          <Icon />
+          <Icon className="size-5" />
         </Button>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
