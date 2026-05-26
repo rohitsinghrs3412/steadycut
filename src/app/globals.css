@@ -259,38 +259,24 @@
   }
 }
 
-/* Smooth theme transitions for core UI elements (eliminates the "flashbang" effect) */
+/* Smooth theme transitions for all elements (eliminates the "flashbang" effect on cards & text) */
 @media (prefers-reduced-motion: no-preference) {
   body, 
-  header, 
-  aside, 
-  main, 
-  footer, 
-  nav,
-  input,
-  button,
-  select,
-  textarea,
-  h1, h2, h3, h4, h5, h6, p, span, a,
-  .glass-card,
-  .border,
-  .border-b,
-  .border-r,
-  .border-t {
-    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-                border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-                color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-                fill 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-                stroke 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-                box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  body * {
+    transition: background-color 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                color 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                fill 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                stroke 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-/* Snappy, hardware-accelerated page entry transitions */
+/* Snappy, highly visible page entry transitions */
 @keyframes pageFadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -299,5 +285,5 @@
 }
 
 .animate-page-fade {
-  animation: pageFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: pageFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
