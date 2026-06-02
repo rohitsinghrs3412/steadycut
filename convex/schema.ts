@@ -154,7 +154,7 @@ export default defineSchema({
   hydrationLogs: defineTable({
     userId: v.string(),
     date: v.string(),
-    photoId: v.id("_storage"),
+    photoId: v.optional(v.id("_storage")),
     beverageName: v.string(),
     containerName: v.string(),
     volumeMl: v.number(),

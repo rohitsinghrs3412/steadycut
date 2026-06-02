@@ -1,4 +1,4 @@
-import { CheckInsSectionPage } from "@/components/steadycut/section-pages";
+import { CheckInsSectionPage } from "@/components/steadycut/sections/check-ins-section";
 import { getAppRouteContext } from "@/lib/app-route";
 
 export default async function CheckInsPage() {

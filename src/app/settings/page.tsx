@@ -1,4 +1,4 @@
-import { SettingsSectionPage } from "@/components/steadycut/section-pages";
+import { SettingsSectionPage } from "@/components/steadycut/sections/settings-section";
 import { getAppRouteContext } from "@/lib/app-route";
 
 export default async function SettingsPage() {

@@ -72,6 +72,9 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <link rel="preconnect" href="https://clerk.steadycut.app" />
+        <link rel="preconnect" href="https://api.convex.cloud" />
+        <link rel="preconnect" href="https://ingest.sentry.io" crossOrigin="anonymous" />
       </head>
       <body className="min-h-full flex flex-col">
         <RootProviders

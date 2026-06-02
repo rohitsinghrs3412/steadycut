@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
-import { PhotoCapturePicker } from "@/components/steadycut/photo-logging-workspace";
+import { PhotoCapturePicker } from "@/components/steadycut/photo-capture-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

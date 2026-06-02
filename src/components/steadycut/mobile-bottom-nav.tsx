@@ -2,12 +2,12 @@
 
 import { useEffect, type TouchEvent } from "react";
 import { BarChart3, Camera, Flame, Plus, Settings } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAppProviderConfig } from "@/components/app/root-providers";
 import { DemoCaloriePhotoCard } from "@/components/steadycut/demo-calorie-photo-card";
-import { PhotoLoggingWorkspace } from "@/components/steadycut/photo-logging-workspace";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -18,6 +18,17 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+
+const PhotoLoggingWorkspace = dynamic(
+  () =>
+    import("@/components/steadycut/photo-logging-workspace").then(
+      (mod) => mod.PhotoLoggingWorkspace
+    ),
+  {
+    ssr: false,
+    loading: () => <QuickLogLoading />,
+  }
+);
 
 const appRoutePrefixes = [
   "/dashboard",
@@ -73,8 +84,31 @@ export function MobileBottomNav() {
       aria-label="Mobile primary"
       className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_30px_rgb(15_23_42/0.08)] backdrop-blur lg:hidden"
     >
-      <div className="relative mx-auto grid max-w-md grid-cols-4 gap-1">
-        {mobileNavItems.map((item) => {
+      <div className="relative mx-auto grid max-w-md grid-cols-5 gap-1">
+        {mobileNavItems.slice(0, 2).map((item) => {
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+          return (
+            <Link
+              key={item.href}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "block rounded-lg text-xs font-medium text-muted-foreground transition-colors active:bg-primary/15",
+                isActive && "text-primary"
+              )}
+              href={item.href}
+              prefetch
+              scroll={false}
+              onMouseEnter={() => warmRoute(item.href)}
+              onTouchStart={(event) => handleTouchStart(event, item.href)}
+            >
+              <MobileBottomNavItemContent isActive={isActive} item={item} />
+            </Link>
+          );
+        })}
+        <div aria-hidden="true" className="block min-h-12 w-full" />
+        {mobileNavItems.slice(2, 4).map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -165,5 +199,13 @@ function QuickLogSheet() {
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function QuickLogLoading() {
+  return (
+    <div className="flex min-h-44 items-center justify-center rounded-lg border bg-card/50 text-sm text-muted-foreground">
+      Loading quick log...
+    </div>
   );
 }

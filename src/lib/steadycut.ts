@@ -118,7 +118,7 @@ export type ScaleLog = {
 export type HydrationLog = {
   id: string;
   date: string;
-  photoId: string;
+  photoId?: string;
   photoUrl?: string | null;
   beverageName: string;
   containerName: string;

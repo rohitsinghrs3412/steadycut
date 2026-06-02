@@ -21,6 +21,10 @@ type ThemeContextValue = {
 };
 
 const THEME_STORAGE_KEY = "steadycut-theme";
+const THEME_TRANSITION_SUPPRESSION_STYLE_ID =
+  "steadycut-theme-transition-suppression";
+
+let themeTransitionSuppressionTimeout: number | null = null;
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
@@ -33,6 +37,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     const nextResolvedTheme = resolveTheme(nextPreference);
     const root = document.documentElement;
 
+    suppressThemeTransitions();
     root.classList.toggle("dark", nextResolvedTheme === "dark");
     root.dataset.theme = nextPreference;
     root.style.colorScheme = nextResolvedTheme;
@@ -121,4 +126,29 @@ function resolveTheme(preference: ThemePreference): ResolvedTheme {
 
 function isThemePreference(value: string | null): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
+}
+
+function suppressThemeTransitions() {
+  if (!document.getElementById(THEME_TRANSITION_SUPPRESSION_STYLE_ID)) {
+    const style = document.createElement("style");
+
+    style.id = THEME_TRANSITION_SUPPRESSION_STYLE_ID;
+    style.appendChild(
+      document.createTextNode(
+        "*, *::before, *::after { transition: none !important; }"
+      )
+    );
+    document.head.appendChild(style);
+  }
+
+  document.body.getBoundingClientRect();
+
+  if (themeTransitionSuppressionTimeout !== null) {
+    window.clearTimeout(themeTransitionSuppressionTimeout);
+  }
+
+  themeTransitionSuppressionTimeout = window.setTimeout(() => {
+    document.getElementById(THEME_TRANSITION_SUPPRESSION_STYLE_ID)?.remove();
+    themeTransitionSuppressionTimeout = null;
+  }, 120);
 }

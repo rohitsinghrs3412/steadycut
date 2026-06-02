@@ -3,6 +3,7 @@
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
+import dynamic from "next/dynamic";
 import {
   createContext,
   type PropsWithChildren,
@@ -11,10 +12,17 @@ import {
 } from "react";
 
 import { DashboardQueryProvider } from "@/components/steadycut/dashboard-query-provider";
-import { MobileAppChrome } from "@/components/steadycut/mobile-bottom-nav";
 import { PwaRegistrar } from "@/components/app/pwa-registrar";
 import { ThemeProvider } from "@/components/app/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+const MobileAppChrome = dynamic(
+  () =>
+    import("@/components/steadycut/mobile-bottom-nav").then(
+      (mod) => mod.MobileAppChrome
+    ),
+  { ssr: false }
+);
 
 type RootProvidersProps = PropsWithChildren<{
   clerkPublishableKey: string;

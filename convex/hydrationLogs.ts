@@ -1,10 +1,14 @@
 import { anyApi } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
-import { action, internalMutation, query, type MutationCtx } from "./_generated/server";
+import { action, internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { getUserId } from "./lib/auth";
 
 const HYDRATION_TARGET_ML = 2000;
+const MIN_HYDRATION_VOLUME_ML = 30;
+const MAX_HYDRATION_VOLUME_ML = 5000;
+const MAX_BEVERAGE_NAME_CHARS = 80;
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const listRecent = query({
   args: {
@@ -22,7 +26,7 @@ export const listRecent = query({
       logs.map(async (log) => ({
         id: log._id,
         ...log,
-        photoUrl: await ctx.storage.getUrl(log.photoId),
+        photoUrl: log.photoId ? await ctx.storage.getUrl(log.photoId) : null,
       }))
     );
   },
@@ -51,6 +55,7 @@ export const saveHydrationLog = internalMutation({
     assumptions: v.array(v.string()),
   },
   handler: async (ctx, args) => {
+    validateDateKey(args.date);
     const now = Date.now();
     const normalizedVolumeMl = Math.max(0, Math.round(args.volumeMl));
     const cleanedAssumptions = args.assumptions
@@ -89,6 +94,84 @@ export const saveHydrationLog = internalMutation({
     };
   },
 });
+
+export const logManualHydration = mutation({
+  args: {
+    date: v.string(),
+    volumeMl: v.number(),
+    beverageName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getUserId(ctx);
+    const now = Date.now();
+    const normalizedVolumeMl = normalizeHydrationVolume(args.volumeMl);
+    const beverageName = normalizeBeverageName(args.beverageName);
+
+    validateDateKey(args.date);
+
+    const id = await ctx.db.insert("hydrationLogs", {
+      userId,
+      date: args.date,
+      beverageName,
+      containerName: "Quick Add",
+      volumeMl: normalizedVolumeMl,
+      confidence: 1.0,
+      assumptions: ["Logged manually via quick-add buttons."],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await syncWaterHabitForDate(ctx, userId, args.date);
+
+    return {
+      id,
+      userId,
+      date: args.date,
+      beverageName,
+      containerName: "Quick Add",
+      volumeMl: normalizedVolumeMl,
+      confidence: 1.0,
+      assumptions: ["Logged manually via quick-add buttons."],
+      createdAt: now,
+      updatedAt: now,
+      photoUrl: null,
+    };
+  },
+});
+
+function validateDateKey(date: string) {
+  if (!DATE_KEY_PATTERN.test(date)) {
+    throw new ConvexError("Date must use YYYY-MM-DD format.");
+  }
+}
+
+function normalizeHydrationVolume(volumeMl: number) {
+  const normalizedVolumeMl = Math.round(volumeMl);
+
+  if (
+    !Number.isFinite(normalizedVolumeMl) ||
+    normalizedVolumeMl < MIN_HYDRATION_VOLUME_ML ||
+    normalizedVolumeMl > MAX_HYDRATION_VOLUME_ML
+  ) {
+    throw new ConvexError(
+      `Hydration amount must be between ${MIN_HYDRATION_VOLUME_ML} ml and ${MAX_HYDRATION_VOLUME_ML} ml.`
+    );
+  }
+
+  return normalizedVolumeMl;
+}
+
+function normalizeBeverageName(beverageName: string) {
+  const normalizedName = beverageName.trim() || "Water";
+
+  if (normalizedName.length > MAX_BEVERAGE_NAME_CHARS) {
+    throw new ConvexError(
+      `Beverage name must be ${MAX_BEVERAGE_NAME_CHARS} characters or less.`
+    );
+  }
+
+  return normalizedName;
+}
 
 async function syncWaterHabitForDate(
   ctx: MutationCtx,

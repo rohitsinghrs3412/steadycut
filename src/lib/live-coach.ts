@@ -1,7 +1,7 @@
 export const LIVE_COACH_MODEL = "gemini-3.1-flash-live-preview";
 export const LIVE_COACH_VOICE_NAME = "Kore";
 
-export const LIVE_COACH_TOKEN_TTL_MS = 30 * 60 * 1000;
+export const LIVE_COACH_TOKEN_TTL_MS = 2 * 60 * 1000;
 export const LIVE_COACH_NEW_SESSION_TTL_MS = 60 * 1000;
 
 export const LIVE_COACH_SYSTEM_INSTRUCTION = [

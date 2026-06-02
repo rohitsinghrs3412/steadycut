@@ -1,8 +1,25 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+const cspHeader = `
+  default-src 'self';
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://clerk.steadycut.app;
+  connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com https://*.convex.cloud wss://*.convex.cloud wss://generativelanguage.googleapis.com https://*.ingest.sentry.io;
+  img-src 'self' blob: data: https://*.convex.cloud https://img.clerk.com;
+  style-src 'self' 'unsafe-inline';
+  frame-src 'self' https://*.clerk.accounts.dev;
+`.replace(/\s{2,}/g, " ").trim();
+
 const nextConfig: NextConfig = {
   devIndicators: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.convex.cloud",
+      },
+    ],
+  },
   env: {
     NEXT_PUBLIC_SENTRY_DSN:
       process.env.NEXT_PUBLIC_SENTRY_DSN ?? process.env.SENTRY_DSN ?? "",
@@ -18,6 +35,10 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
+          {
+            key: "Content-Security-Policy",
+            value: cspHeader,
+          },
           {
             key: "X-DNS-Prefetch-Control",
             value: "on",

@@ -8,15 +8,16 @@ import type { Id } from "@convex/_generated/dataModel";
 import { AppLoadingPage } from "@/components/steadycut/app-loading-page";
 import { DashboardScreen } from "@/components/steadycut/dashboard-screen";
 import { useDashboardQuery } from "@/components/steadycut/dashboard-query-provider";
-import type {
-  CheckInInput,
-  CoachMessage,
-  DashboardData,
-  HydrationLog,
-  MealLog,
-  MealType,
-  ScaleTimeOfDay,
-  UserProfile,
+import {
+  type CheckInInput,
+  type CoachMessage,
+  type DashboardData,
+  type HydrationLog,
+  type MealLog,
+  type MealType,
+  type ScaleTimeOfDay,
+  type UserProfile,
+  toDateKey,
 } from "@/lib/steadycut";
 
 type LiveDashboardProps = {
@@ -28,6 +29,7 @@ export function LiveDashboard({ missingItems }: LiveDashboardProps) {
   const ensureDefaultHabits = useMutation(api.habits.ensureDefaultHabits);
   const saveCheckInMutation = useMutation(api.checkIns.upsertCheckIn);
   const generateCoachAction = useAction(api.coach.generateDailyCoach);
+  const logManualHydrationMutation = useMutation(api.hydrationLogs.logManualHydration);
   const { dashboard } = useDashboardQuery();
 
   useEffect(() => {
@@ -52,6 +54,27 @@ export function LiveDashboard({ missingItems }: LiveDashboardProps) {
     return (await generateCoachAction({ date })) as CoachMessage;
   }
 
+  async function handleLogHydration(volumeMl: number, beverageName: string) {
+    const log = await logManualHydrationMutation({
+      date: toDateKey(),
+      volumeMl,
+      beverageName,
+    });
+
+    return {
+      id: log.id,
+      date: log.date,
+      photoUrl: log.photoUrl,
+      beverageName: log.beverageName,
+      containerName: log.containerName,
+      volumeMl: log.volumeMl,
+      confidence: log.confidence,
+      assumptions: log.assumptions,
+      createdAt: log.createdAt,
+      updatedAt: log.updatedAt,
+    } satisfies HydrationLog;
+  }
+
   return (
     <DashboardScreen
       data={data}
@@ -59,6 +82,7 @@ export function LiveDashboard({ missingItems }: LiveDashboardProps) {
       mode="live"
       onGenerateCoach={generateCoach}
       onSaveCheckIn={saveCheckIn}
+      onLogHydration={handleLogHydration}
     />
   );
 }
@@ -129,7 +153,7 @@ function mapDashboardData(dashboard: {
   hydrationLogs: Array<{
     _id: Id<"hydrationLogs">;
     date: string;
-    photoId: Id<"_storage">;
+    photoId?: Id<"_storage">;
     beverageName: string;
     containerName: string;
     volumeMl: number;
@@ -217,7 +241,7 @@ function mapDashboardData(dashboard: {
     hydrationLogs: (dashboard.hydrationLogs ?? []).map((log) => ({
       id: log._id,
       date: log.date,
-      photoId: log.photoId,
+      photoId: log.photoId ?? undefined,
       beverageName: log.beverageName,
       containerName: log.containerName,
       volumeMl: log.volumeMl,

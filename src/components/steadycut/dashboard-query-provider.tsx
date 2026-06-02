@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -27,11 +28,11 @@ const DashboardQueryContext = createContext<DashboardQueryContextValue>({
   isLoadingDashboard: false,
 });
 
-let lastDashboardSnapshot: DashboardQueryResult | undefined;
+const lastDashboardSnapshots = new Map<string, DashboardQueryResult>();
 const dashboardSnapshotListeners = new Set<() => void>();
 
-function getDashboardSnapshot() {
-  return lastDashboardSnapshot;
+function getDashboardSnapshot(userId: string | null | undefined) {
+  return userId ? lastDashboardSnapshots.get(userId) : undefined;
 }
 
 function subscribeDashboardSnapshot(listener: () => void) {
@@ -42,46 +43,64 @@ function subscribeDashboardSnapshot(listener: () => void) {
   };
 }
 
-function setDashboardSnapshot(nextDashboard: DashboardQueryResult | undefined) {
-  if (lastDashboardSnapshot === nextDashboard) {
-    return;
-  }
-
-  lastDashboardSnapshot = nextDashboard;
+function notifyDashboardSnapshotListeners() {
   for (const listener of dashboardSnapshotListeners) {
     listener();
   }
 }
 
+function setDashboardSnapshot(userId: string, nextDashboard: DashboardQueryResult) {
+  if (lastDashboardSnapshots.get(userId) === nextDashboard) {
+    return;
+  }
+
+  lastDashboardSnapshots.set(userId, nextDashboard);
+  notifyDashboardSnapshotListeners();
+}
+
+function clearDashboardSnapshots() {
+  if (lastDashboardSnapshots.size === 0) {
+    return;
+  }
+
+  lastDashboardSnapshots.clear();
+  notifyDashboardSnapshotListeners();
+}
+
 export function DashboardQueryProvider({ children }: PropsWithChildren) {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const getSnapshot = useCallback(
+    () => getDashboardSnapshot(userId),
+    [userId]
+  );
   const cachedDashboard = useSyncExternalStore(
     subscribeDashboardSnapshot,
-    getDashboardSnapshot,
-    getDashboardSnapshot
+    getSnapshot,
+    getSnapshot
   );
+  const canQueryDashboard = Boolean(isLoaded && isSignedIn && userId);
   const liveDashboard = useQuery(
     api.dashboard.getDashboard,
-    isLoaded && isSignedIn ? {} : "skip"
+    canQueryDashboard ? {} : "skip"
   );
 
   useEffect(() => {
-    if (liveDashboard) {
-      setDashboardSnapshot(liveDashboard);
+    if (userId && liveDashboard) {
+      setDashboardSnapshot(userId, liveDashboard);
     } else if (isLoaded && !isSignedIn) {
-      setDashboardSnapshot(undefined);
+      clearDashboardSnapshots();
     }
-  }, [isLoaded, isSignedIn, liveDashboard]);
+  }, [isLoaded, isSignedIn, liveDashboard, userId]);
 
-  const dashboard = liveDashboard ?? cachedDashboard;
+  const dashboard = canQueryDashboard ? liveDashboard ?? cachedDashboard : undefined;
 
   const value = useMemo(
     () => ({
       dashboard,
       isLoadingDashboard:
-        Boolean(isLoaded && isSignedIn) && !liveDashboard && !dashboard,
+        canQueryDashboard && !liveDashboard && !dashboard,
     }),
-    [dashboard, isLoaded, isSignedIn, liveDashboard]
+    [canQueryDashboard, dashboard, liveDashboard]
   );
 
   return (
