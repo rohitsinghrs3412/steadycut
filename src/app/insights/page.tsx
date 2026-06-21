@@ -1,4 +1,4 @@
-import { InsightsSectionPage } from "@/components/steadycut/sections/insights-section";
+import { InsightsSectionPage } from "@/components/steadycut/sections/insights";
 import { getAppRouteContext } from "@/lib/app-route";
 
 export default async function InsightsPage() {

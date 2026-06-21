@@ -1,4 +1,4 @@
-import { CoachSectionPage } from "@/components/steadycut/sections/coach-section";
+import { CoachSectionPage } from "@/components/steadycut/sections/coach";
 import { getAppRouteContext } from "@/lib/app-route";
 
 export default async function CoachPage() {

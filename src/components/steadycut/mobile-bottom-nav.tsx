@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type TouchEvent } from "react";
+import { useEffect } from "react";
 import { BarChart3, Camera, Flame, Plus, Settings } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link, { useLinkStatus } from "next/link";
@@ -65,19 +65,7 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const router = useRouter();
 
-  useEffect(() => {
-    for (const item of mobileNavItems) {
-      router.prefetch(item.href);
-    }
-  }, [router]);
 
-  function warmRoute(href: string) {
-    router.prefetch(href);
-  }
-
-  function handleTouchStart(_event: TouchEvent<HTMLAnchorElement>, href: string) {
-    warmRoute(href);
-  }
 
   return (
     <nav
@@ -100,8 +88,6 @@ export function MobileBottomNav() {
               href={item.href}
               prefetch
               scroll={false}
-              onMouseEnter={() => warmRoute(item.href)}
-              onTouchStart={(event) => handleTouchStart(event, item.href)}
             >
               <MobileBottomNavItemContent isActive={isActive} item={item} />
             </Link>
@@ -123,8 +109,6 @@ export function MobileBottomNav() {
               href={item.href}
               prefetch
               scroll={false}
-              onMouseEnter={() => warmRoute(item.href)}
-              onTouchStart={(event) => handleTouchStart(event, item.href)}
             >
               <MobileBottomNavItemContent isActive={isActive} item={item} />
             </Link>
@@ -176,7 +160,7 @@ function QuickLogSheet() {
         </Button>
       </SheetTrigger>
       <SheetContent
-        className="max-h-[88svh] overflow-y-auto rounded-t-2xl p-0 glass-card bg-transparent border-t border-white/10 dark:border-white/5"
+        className="max-h-[88svh] overflow-y-auto rounded-t-2xl p-0 pb-[max(1rem,env(safe-area-inset-bottom))] glass-card bg-transparent border-t border-white/10 dark:border-white/5"
         side="bottom"
       >
         <SheetHeader className="border-b pr-14">

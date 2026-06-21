@@ -1,0 +1,10 @@
+▲ Next.js 16.2.6 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://172.30.226.120:3000
+- Environments: .env.local
+✓ Ready in 931ms
+○ Compiling /instrumentation ...
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+[?25h

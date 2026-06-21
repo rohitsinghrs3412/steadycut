@@ -1,0 +1,9 @@
+﻿
+Running 8 tests using 6 workers
+
+  x  4 [Chromium Mobile (Galaxy S9+)] ΓÇ║ e2e\real-world-scenarios.spec.ts:4:7 ΓÇ║ Real-World User Journey (Mobile) ΓÇ║ user can navigate, switch tabs, open quick log, view progress, and return (21.2s)
+  x  1 [Chromium Mobile (Galaxy S9+)] ΓÇ║ e2e\dashboard-tabs.spec.ts:12:7 ΓÇ║ Dashboard Tabs (Mobile) ΓÇ║ should transition tabs correctly and swap content (21.6s)
+  x  3 [Chromium Mobile (Galaxy S9+)] ΓÇ║ e2e\charts-responsiveness.spec.ts:14:7 ΓÇ║ Charts Responsiveness (Mobile) ΓÇ║ chart should be responsive and not overflow the card container (21.5s)
+  x  5 [Chromium Mobile (Galaxy S9+)] ΓÇ║ e2e\dashboard-tabs.spec.ts:37:7 ΓÇ║ Dashboard Tabs (Mobile) ΓÇ║ should preserve scroll position across tab transitions (20.4s)
+  x  6 [Chromium Mobile (Galaxy S9+)] ΓÇ║ e2e\dashboard-tabs.spec.ts:66:7 ΓÇ║ Dashboard Tabs (Mobile) ΓÇ║ should maintain Cumulative Layout Shift (CLS) below 0.1 during tab transitions (20.4s)
+  x  2 [Chromium Mobile (Galaxy S9+)] ΓÇ║ e2e\charts-responsiveness.spec.ts:38:7 ΓÇ║ Charts Responsiveness (Mobile) ΓÇ║ X-Axis SVG labels should not overlap or collide (21.4s)

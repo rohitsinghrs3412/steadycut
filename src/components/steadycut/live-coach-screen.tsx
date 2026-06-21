@@ -35,25 +35,21 @@ import { Input } from "@/components/ui/input";
 import { LIVE_COACH_MODEL, LIVE_COACH_VOICE_NAME } from "@/lib/live-coach";
 import { cn } from "@/lib/utils";
 
-import {
-  base64ToUint8Array,
-  getPcmSampleRate,
-  getVoicePrompt,
-  readLiveTokenResponse,
-  downsampleToPcm16,
-  arrayBufferToBase64,
-  getPreviewReason,
-} from "@/lib/audio-media-utils";
-import { useCameraStream } from "./coach/use-camera-stream";
-import { TranscriptPanel } from "./coach/transcript-panel";
-
 type AppMode = "demo" | "live" | "setup";
 type ConnectionState = "idle" | "preview" | "connecting" | "connected" | "error";
+type FacingMode = "environment" | "user";
 
 type LiveCoachScreenProps = {
   hasGemini: boolean;
   missingItems: string[];
   mode: AppMode;
+};
+
+type LiveTokenResponse = {
+  error?: string;
+  expiresAt?: string;
+  model?: string;
+  token?: string;
 };
 
 type TranscriptLine = {
@@ -62,10 +58,50 @@ type TranscriptLine = {
   text: string;
 };
 
+type CameraDeviceOption = {
+  deviceId: string;
+  facing: FacingMode | "unknown";
+  label: string;
+};
+
+type VoicePromptInput = {
+  cameraError: string;
+  connectionState: ConnectionState;
+  isMicOn: boolean;
+  latestSystemText?: string;
+  liveReady: boolean;
+  statusText: string;
+};
+
 type WindowWithWebkitAudio = Window &
   typeof globalThis & {
     webkitAudioContext?: typeof AudioContext;
   };
+
+type ZoomCapability = {
+  max?: number;
+  min?: number;
+  step?: number;
+};
+
+type ZoomRange = {
+  max: number;
+  min: number;
+  step: number;
+};
+
+type ZoomMediaTrackCapabilities = MediaTrackCapabilities & {
+  zoom?: ZoomCapability;
+};
+
+type ZoomMediaTrackSettings = MediaTrackSettings & {
+  deviceId?: string;
+  zoom?: number;
+};
+
+type ZoomMediaTrackConstraintSet = MediaTrackConstraintSet & {
+  zoom?: number;
+};
 
 const previewResponses = [
   "Preview mode is ready. In a live session I would watch the scene with you and keep the next action practical.",
@@ -79,15 +115,21 @@ export function LiveCoachScreen({
   mode,
 }: LiveCoachScreenProps) {
   const liveReady = mode === "live" && hasGemini;
+  const [activeCameraLabel, setActiveCameraLabel] = useState("");
+  const [availableCameras, setAvailableCameras] = useState<CameraDeviceOption[]>([]);
+  const [cameraError, setCameraError] = useState("");
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
+  const [facingMode, setFacingMode] = useState<FacingMode>("environment");
+  const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isTextPanelOpen, setIsTextPanelOpen] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [statusText, setStatusText] = useState(
     liveReady ? "Ready" : "Preview"
   );
-  
+  const [streamVersion, setStreamVersion] = useState(0);
+  const [selectedCameraId, setSelectedCameraId] = useState("");
   const [transcript, setTranscript] = useState<TranscriptLine[]>([
     {
       id: "system-intro",
@@ -97,10 +139,14 @@ export function LiveCoachScreen({
         : getPreviewReason(missingItems),
     },
   ]);
+  const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null);
+  const [zoomValue, setZoomValue] = useState(1);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frameTimerRef = useRef<number | null>(null);
   const lineIdRef = useRef(0);
   const mutedGainRef = useRef<GainNode | null>(null);
   const playheadTimeRef = useRef(0);
@@ -108,6 +154,8 @@ export function LiveCoachScreen({
   const sessionRef = useRef<Session | null>(null);
   const speakingTimerRef = useRef<number | null>(null);
   const stateRef = useRef(connectionState);
+  const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     stateRef.current = connectionState;
@@ -116,6 +164,7 @@ export function LiveCoachScreen({
   const appendTranscript = useCallback(
     (role: TranscriptLine["role"], text: string) => {
       const cleaned = text.trim();
+
       if (!cleaned) {
         return;
       }
@@ -133,41 +182,6 @@ export function LiveCoachScreen({
     },
     []
   );
-
-  const handleVideoFrame = useCallback((base64Frame: string) => {
-    if (sessionRef.current && stateRef.current === "connected") {
-      sessionRef.current.sendRealtimeInput({
-        video: {
-          data: base64Frame,
-          mimeType: "image/jpeg",
-        },
-      });
-    }
-  }, []);
-
-  const {
-    activeCameraLabel,
-    availableCameras,
-    cameraError,
-    facingMode,
-    isCameraOn,
-    setIsCameraOn,
-    zoomRange,
-    zoomValue,
-    streamVersion,
-    streamRef,
-    videoRef,
-    stopLocalMedia,
-    startLocalMedia,
-    applyCameraZoom,
-    switchCameraFacing,
-    startVideoFrames,
-    stopVideoFrames,
-  } = useCameraStream({
-    isMicOn,
-    sessionActive: connectionState === "connected",
-    onVideoFrame: handleVideoFrame,
-  });
 
   const getAudioContext = useCallback(() => {
     if (audioContextRef.current) {
@@ -251,20 +265,261 @@ export function LiveCoachScreen({
       scheduledSourcesRef.current.add(source);
       setStatusText("Speaking");
       clearSpeakingTimer();
-      
       speakingTimerRef.current = window.setTimeout(() => {
         speakingTimerRef.current = null;
+
         if (stateRef.current === "connected") {
           setStatusText(isMicOn ? "Listening" : "Mic muted");
         }
       }, Math.max(450, audioBuffer.duration * 1000 + 220));
-
       source.onended = () => {
         scheduledSourcesRef.current.delete(source);
       };
     },
     [clearSpeakingTimer, getAudioContext, isMicOn]
   );
+
+  const handleLiveMessage = useCallback(
+    (message: LiveServerMessage) => {
+      if (message.setupComplete) {
+        setStatusText(isMicOn ? "Listening" : "Mic muted");
+        return;
+      }
+
+      if (message.goAway?.timeLeft) {
+        setStatusText("Ending soon");
+      }
+
+      if (message.serverContent?.interrupted) {
+        stopAudioOutput();
+        setStatusText(isMicOn ? "Listening" : "Mic muted");
+      }
+
+      const inputText = message.serverContent?.inputTranscription?.text;
+      const outputText = message.serverContent?.outputTranscription?.text;
+
+      if (inputText) {
+        appendTranscript("user", inputText);
+      }
+
+      if (outputText) {
+        appendTranscript("coach", outputText);
+      }
+
+      const parts = message.serverContent?.modelTurn?.parts ?? [];
+
+      for (const part of parts) {
+        const inlineData = "inlineData" in part ? part.inlineData : undefined;
+
+        if (inlineData?.data) {
+          void playLiveAudio(inlineData.data, inlineData.mimeType).catch(
+            (error) => {
+              Sentry.captureException(error, {
+                tags: {
+                  feature: "live-coach-audio-output",
+                },
+              });
+              setStatusText("Audio blocked");
+              appendTranscript(
+                "system",
+                "Speaker playback was blocked. Tap End, then Start again."
+              );
+            }
+          );
+        }
+      }
+    },
+    [appendTranscript, isMicOn, playLiveAudio, stopAudioOutput]
+  );
+
+  const stopLocalMedia = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  const refreshCameraDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return [] as CameraDeviceOption[];
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices
+      .filter((device) => device.kind === "videoinput")
+      .map((device, index) => {
+        const label = device.label || `Camera ${index + 1}`;
+
+        return {
+          deviceId: device.deviceId,
+          facing: inferCameraFacing(label),
+          label,
+        } satisfies CameraDeviceOption;
+      });
+
+    setAvailableCameras(cameras);
+    return cameras;
+  }, []);
+
+  const configureVideoTrack = useCallback(
+    async (track: MediaStreamTrack, cameras: CameraDeviceOption[]) => {
+      const settings = track.getSettings() as ZoomMediaTrackSettings;
+      const activeCamera = cameras.find(
+        (camera) => camera.deviceId === settings.deviceId
+      );
+
+      setActiveCameraLabel(
+        getReadableCameraLabel(activeCamera?.label, facingMode)
+      );
+
+      const nextZoomRange = getZoomRange(track);
+      setZoomRange(nextZoomRange);
+
+      if (!nextZoomRange) {
+        setZoomValue(1);
+        return;
+      }
+
+      const targetZoom = nextZoomRange.min;
+
+      try {
+        await track.applyConstraints({
+          advanced: [{ zoom: targetZoom } as ZoomMediaTrackConstraintSet],
+        });
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "live-coach-camera-zoom",
+          },
+        });
+      }
+
+      const nextSettings = track.getSettings() as ZoomMediaTrackSettings;
+      setZoomValue(nextSettings.zoom ?? targetZoom);
+    },
+    [facingMode]
+  );
+
+  const startLocalMedia = useCallback(async () => {
+    stopLocalMedia();
+    setCameraError("");
+    setZoomRange(null);
+
+    if (!isCameraOn && !isMicOn) {
+      setStreamVersion((version) => version + 1);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: isMicOn
+          ? {
+              autoGainControl: true,
+              echoCancellation: true,
+              noiseSuppression: true,
+            }
+          : false,
+        video: isCameraOn
+          ? getVideoConstraints(facingMode, selectedCameraId)
+          : false,
+      });
+      const cameras = await refreshCameraDevices().catch(
+        () => [] as CameraDeviceOption[]
+      );
+      const track = stream.getVideoTracks()[0];
+      const settings = track?.getSettings() as ZoomMediaTrackSettings | undefined;
+      const preferredCamera =
+        !selectedCameraId && isCameraOn
+          ? getPreferredCamera(cameras, facingMode, {
+              includeUnknownFallback: false,
+            })
+          : null;
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => undefined);
+      }
+
+      if (track) {
+        await configureVideoTrack(track, cameras);
+      }
+
+      if (
+        preferredCamera?.deviceId &&
+        settings?.deviceId &&
+        preferredCamera.deviceId !== settings.deviceId
+      ) {
+        setSelectedCameraId(preferredCamera.deviceId);
+      }
+
+      setStreamVersion((version) => version + 1);
+    } catch (error) {
+      if (selectedCameraId && isCameraOn) {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "live-coach-camera-device",
+          },
+        });
+        setSelectedCameraId("");
+        setStreamVersion((version) => version + 1);
+        return;
+      }
+
+      setCameraError("Camera or microphone permission was blocked.");
+      setStreamVersion((version) => version + 1);
+    }
+  }, [
+    configureVideoTrack,
+    facingMode,
+    isCameraOn,
+    isMicOn,
+    refreshCameraDevices,
+    selectedCameraId,
+    stopLocalMedia,
+  ]);
+
+  const applyCameraZoom = useCallback(
+    async (value: number) => {
+      const track = streamRef.current?.getVideoTracks()[0];
+
+      if (!track || !zoomRange) {
+        return;
+      }
+
+      const zoom = clampNumber(value, zoomRange.min, zoomRange.max);
+      setZoomValue(zoom);
+
+      try {
+        await track.applyConstraints({
+          advanced: [{ zoom } as ZoomMediaTrackConstraintSet],
+        });
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "live-coach-camera-zoom",
+          },
+        });
+      }
+    },
+    [zoomRange]
+  );
+
+  const switchCameraFacing = useCallback(() => {
+    const nextFacingMode =
+      facingMode === "environment" ? "user" : "environment";
+    const preferredCamera = getPreferredCamera(
+      availableCameras,
+      nextFacingMode,
+      { includeUnknownFallback: false }
+    );
+
+    setSelectedCameraId(preferredCamera?.deviceId ?? "");
+    setFacingMode(nextFacingMode);
+  }, [availableCameras, facingMode]);
 
   const stopAudioCapture = useCallback((sendEnd = false) => {
     audioProcessorRef.current?.disconnect();
@@ -329,7 +584,65 @@ export function LiveCoachScreen({
     audioSourceRef.current = source;
     audioProcessorRef.current = processor;
     mutedGainRef.current = mutedGain;
-  }, [getAudioContext, isMicOn, stopAudioCapture, streamRef]);
+  }, [getAudioContext, isMicOn, stopAudioCapture]);
+
+  const sendVideoFrame = useCallback(async () => {
+    const session = sessionRef.current;
+    const video = videoRef.current;
+
+    if (!session || !video || !isCameraOn || video.readyState < 2) {
+      return;
+    }
+
+    const canvas = cameraCanvasRef.current ?? document.createElement("canvas");
+    cameraCanvasRef.current = canvas;
+    const width = 360;
+    const aspectRatio = video.videoHeight && video.videoWidth
+      ? video.videoHeight / video.videoWidth
+      : 4 / 3;
+
+    canvas.width = width;
+    canvas.height = Math.max(240, Math.round(width * aspectRatio));
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.64);
+    });
+
+    if (!blob || stateRef.current !== "connected") {
+      return;
+    }
+
+    const buffer = await blob.arrayBuffer();
+    session.sendRealtimeInput({
+      video: {
+        data: arrayBufferToBase64(buffer),
+        mimeType: "image/jpeg",
+      },
+    });
+  }, [isCameraOn]);
+
+  const stopVideoFrames = useCallback(() => {
+    if (frameTimerRef.current != null) {
+      window.clearTimeout(frameTimerRef.current);
+      frameTimerRef.current = null;
+    }
+  }, []);
+
+  const startVideoFrames = useCallback(() => {
+    stopVideoFrames();
+
+    const tick = () => {
+      if (stateRef.current !== "connected") {
+        return;
+      }
+
+      void sendVideoFrame();
+      frameTimerRef.current = window.setTimeout(tick, 1200);
+    };
+
+    tick();
+  }, [sendVideoFrame, stopVideoFrames]);
 
   const stopMediaSenders = useCallback(
     (sendAudioEnd = false) => {
@@ -353,59 +666,6 @@ export function LiveCoachScreen({
       }
     },
     [appendTranscript, liveReady, stopAudioOutput, stopMediaSenders]
-  );
-
-  const handleLiveMessage = useCallback(
-    (message: LiveServerMessage) => {
-      if (message.setupComplete) {
-        setStatusText(isMicOn ? "Listening" : "Mic muted");
-        return;
-      }
-
-      if (message.goAway?.timeLeft) {
-        setStatusText("Ending soon");
-      }
-
-      if (message.serverContent?.interrupted) {
-        stopAudioOutput();
-        setStatusText(isMicOn ? "Listening" : "Mic muted");
-      }
-
-      const inputText = message.serverContent?.inputTranscription?.text;
-      const outputText = message.serverContent?.outputTranscription?.text;
-
-      if (inputText) {
-        appendTranscript("user", inputText);
-      }
-
-      if (outputText) {
-        appendTranscript("coach", outputText);
-      }
-
-      const parts = message.serverContent?.modelTurn?.parts ?? [];
-
-      for (const part of parts) {
-        const inlineData = "inlineData" in part ? part.inlineData : undefined;
-
-        if (inlineData?.data) {
-          void playLiveAudio(inlineData.data, inlineData.mimeType).catch(
-            (error) => {
-              Sentry.captureException(error, {
-                tags: {
-                  feature: "live-coach-audio-output",
-                },
-              });
-              setStatusText("Audio blocked");
-              appendTranscript(
-                "system",
-                "Speaker playback was blocked. Tap End, then Start again."
-              );
-            }
-          );
-        }
-      }
-    },
-    [appendTranscript, isMicOn, playLiveAudio, stopAudioOutput]
   );
 
   const connect = useCallback(async () => {
@@ -509,6 +769,17 @@ export function LiveCoachScreen({
   ]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void startLocalMedia();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      stopLocalMedia();
+    };
+  }, [startLocalMedia, stopLocalMedia]);
+
+  useEffect(() => {
     return () => {
       clearSpeakingTimer();
       stopMediaSenders(true);
@@ -546,6 +817,7 @@ export function LiveCoachScreen({
     event.preventDefault();
 
     const text = messageText.trim();
+
     if (!text) {
       return;
     }
@@ -559,7 +831,7 @@ export function LiveCoachScreen({
     setMessageText("");
 
     if (connectionState === "preview" || !liveReady) {
-      const response = previewResponses[lineIdRef.current % previewResponses.length] ?? "Preview response.";
+      const response = previewResponses[lineIdRef.current % previewResponses.length];
       window.setTimeout(() => appendTranscript("coach", response), 250);
       return;
     }
@@ -586,7 +858,6 @@ export function LiveCoachScreen({
   const latestSystemText = [...transcript]
     .reverse()
     .find((line) => line.role === "system")?.text;
-  
   const switchCameraLabel =
     activeCameraLabel || (facingMode === "environment" ? "Rear" : "Front");
   const switchCameraAriaLabel =
@@ -692,9 +963,25 @@ export function LiveCoachScreen({
             ) : null}
           </div>
         ) : null}
-        
         {isTextPanelOpen ? (
-          <TranscriptPanel transcript={transcript} />
+          <div className="max-h-[28svh] w-full min-w-0 overflow-y-auto rounded-lg border border-white/10 bg-black/45 p-2.5 backdrop-blur-md">
+            <div className="flex flex-col gap-2">
+              {transcript.map((line) => (
+                <div
+                  key={line.id}
+                  className={cn(
+                    "w-fit max-w-[88%] rounded-lg px-3 py-2 text-xs leading-relaxed",
+                    line.role === "user" && "ml-auto bg-white text-black",
+                    line.role === "coach" &&
+                      "bg-primary text-primary-foreground",
+                    line.role === "system" && "mx-auto bg-white/10 text-white/72"
+                  )}
+                >
+                  {line.text}
+                </div>
+              ))}
+            </div>
+          </div>
         ) : voicePrompt ? (
           <div className="mx-auto max-w-[92%] rounded-full bg-black/45 px-4 py-2 text-center text-xs leading-relaxed text-white/78 shadow-lg backdrop-blur-md">
             {voicePrompt}
@@ -702,94 +989,95 @@ export function LiveCoachScreen({
         ) : null}
 
         <div className="mx-auto flex w-full max-w-md min-w-0 items-center gap-2 rounded-full border border-white/12 bg-black/55 p-2 shadow-2xl backdrop-blur-xl">
-          <Button
-            aria-label={isMicOn ? "Mute microphone" : "Unmute microphone"}
-            className={controlButtonClass}
-            size="icon"
-            style={controlButtonStyle}
-            type="button"
-            variant="outline"
-            onClick={() => {
-              const nextIsMicOn = !isMicOn;
-              setIsMicOn(nextIsMicOn);
+            <Button
+              aria-label={isMicOn ? "Mute microphone" : "Unmute microphone"}
+              className={controlButtonClass}
+              size="icon"
+              style={controlButtonStyle}
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const nextIsMicOn = !isMicOn;
+                setIsMicOn(nextIsMicOn);
 
-              if (connectionState === "connected" && statusText !== "Speaking") {
-                setStatusText(nextIsMicOn ? "Listening" : "Mic muted");
-              }
-            }}
-          >
-            {isMicOn ? <Mic /> : <MicOff />}
-          </Button>
-          <Button
-            aria-label={isCameraOn ? "Turn camera off" : "Turn camera on"}
-            className={controlButtonClass}
-            size="icon"
-            style={controlButtonStyle}
-            type="button"
-            variant="outline"
-            onClick={() => setIsCameraOn((value) => !value)}
-          >
-            {isCameraOn ? <Camera /> : <CameraOff />}
-          </Button>
-          <Button
-            aria-label={switchCameraAriaLabel}
-            className={controlButtonClass}
-            disabled={!isCameraOn}
-            size="icon"
-            style={controlButtonStyle}
-            type="button"
-            variant="outline"
-            onClick={switchCameraFacing}
-          >
-            <FlipHorizontal2 />
-          </Button>
-          <Button
-            aria-label={isTextPanelOpen ? "Hide text panel" : "Show text panel"}
-            className={cn(
-              controlButtonClass,
-              isTextPanelOpen && "bg-white text-black hover:bg-white/90"
-            )}
-            size="icon"
-            style={controlButtonStyle}
-            type="button"
-            variant="outline"
-            onClick={() => setIsTextPanelOpen((value) => !value)}
-          >
-            <MessageCircle />
-          </Button>
-          <Button
-            className={cn(
-              "h-12 min-w-0 flex-1 overflow-hidden rounded-full px-4 text-sm font-semibold shadow-lg",
-              isSessionActive
-                ? "bg-destructive text-white hover:bg-destructive/90"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
-            )}
-            disabled={isBusy}
-            style={{
-              flex: "1 1 0",
-              height: "3.25rem",
-              minWidth: "7.5rem",
-            }}
-            type="button"
-            onClick={() => {
-              if (isSessionActive) {
-                disconnect();
-                return;
-              }
-              void connect();
-            }}
-          >
-            {isBusy ? (
-              <Loader2 className="animate-spin" />
-            ) : isSessionActive ? (
-              <PhoneOff data-icon="inline-start" />
-            ) : (
-              <Sparkles data-icon="inline-start" />
-            )}
-            <span className="truncate">
-              {isBusy ? "Starting" : isSessionActive ? "End" : "Start"}
-            </span>
-          </Button>
+                if (connectionState === "connected" && statusText !== "Speaking") {
+                  setStatusText(nextIsMicOn ? "Listening" : "Mic muted");
+                }
+              }}
+            >
+              {isMicOn ? <Mic /> : <MicOff />}
+            </Button>
+            <Button
+              aria-label={isCameraOn ? "Turn camera off" : "Turn camera on"}
+              className={controlButtonClass}
+              size="icon"
+              style={controlButtonStyle}
+              type="button"
+              variant="outline"
+              onClick={() => setIsCameraOn((value) => !value)}
+            >
+              {isCameraOn ? <Camera /> : <CameraOff />}
+            </Button>
+            <Button
+              aria-label={switchCameraAriaLabel}
+              className={controlButtonClass}
+              disabled={!isCameraOn}
+              size="icon"
+              style={controlButtonStyle}
+              type="button"
+              variant="outline"
+              onClick={switchCameraFacing}
+            >
+              <FlipHorizontal2 />
+            </Button>
+            <Button
+              aria-label={isTextPanelOpen ? "Hide text panel" : "Show text panel"}
+              className={cn(
+                controlButtonClass,
+                isTextPanelOpen && "bg-white text-black hover:bg-white/90"
+              )}
+              size="icon"
+              style={controlButtonStyle}
+              type="button"
+              variant="outline"
+              onClick={() => setIsTextPanelOpen((value) => !value)}
+            >
+              <MessageCircle />
+            </Button>
+            <Button
+              className={cn(
+                "h-12 min-w-0 flex-1 overflow-hidden rounded-full px-4 text-sm font-semibold shadow-lg",
+                isSessionActive
+                  ? "bg-destructive text-white hover:bg-destructive/90"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
+              disabled={isBusy}
+              style={{
+                flex: "1 1 0",
+                height: "3.25rem",
+                minWidth: "7.5rem",
+              }}
+              type="button"
+              onClick={() => {
+                if (isSessionActive) {
+                  disconnect();
+                  return;
+                }
+
+                void connect();
+              }}
+            >
+              {isBusy ? (
+                <Loader2 className="animate-spin" />
+              ) : isSessionActive ? (
+                <PhoneOff data-icon="inline-start" />
+              ) : (
+                <Sparkles data-icon="inline-start" />
+              )}
+              <span className="truncate">
+                {isBusy ? "Starting" : isSessionActive ? "End" : "Start"}
+              </span>
+            </Button>
 
           {isTextPanelOpen ? (
             <form
@@ -842,4 +1130,325 @@ function StatusDot({ state }: { state: ConnectionState }) {
       {isBusy ? <Loader2 className="size-4 animate-spin" /> : isLive ? "LIVE" : isPreview ? "DEMO" : "OFF"}
     </div>
   );
+}
+
+function getPreviewReason(missingItems: string[]) {
+  if (missingItems.includes("GOOGLE_GENERATIVE_AI_API_KEY")) {
+    return "Gemini Live needs the Google API key.";
+  }
+
+  if (missingItems.length > 0) {
+    return "Preview mode is active.";
+  }
+
+  return "Live services are not enabled.";
+}
+
+function getVideoConstraints(
+  facingMode: FacingMode,
+  selectedCameraId: string
+): MediaTrackConstraints {
+  const baseConstraints: MediaTrackConstraints = {
+    aspectRatio: { ideal: 16 / 9 },
+    frameRate: { ideal: 30, max: 30 },
+    height: { ideal: 1080 },
+    width: { ideal: 1920 },
+  };
+
+  if (selectedCameraId) {
+    return {
+      ...baseConstraints,
+      deviceId: { exact: selectedCameraId },
+    };
+  }
+
+  return {
+    ...baseConstraints,
+    facingMode: { ideal: facingMode },
+  };
+}
+
+function inferCameraFacing(label: string): CameraDeviceOption["facing"] {
+  const normalized = label.toLowerCase();
+
+  if (/(front|user|selfie)/.test(normalized)) {
+    return "user";
+  }
+
+  if (/(back|rear|environment|world|wide|tele|macro)/.test(normalized)) {
+    return "environment";
+  }
+
+  return "unknown";
+}
+
+function getCameraCandidates(
+  cameras: CameraDeviceOption[],
+  facingMode: FacingMode,
+  options: { includeUnknownFallback?: boolean } = {}
+) {
+  const includeUnknownFallback = options.includeUnknownFallback ?? true;
+  const preferred = cameras.filter((camera) => camera.facing === facingMode);
+
+  if (preferred.length > 0) {
+    return [...preferred].sort(
+      (left, right) =>
+        getCameraScore(right, facingMode) - getCameraScore(left, facingMode)
+    );
+  }
+
+  if (!includeUnknownFallback) {
+    return [];
+  }
+
+  return cameras.filter((camera) => camera.facing === "unknown");
+}
+
+function getPreferredCamera(
+  cameras: CameraDeviceOption[],
+  facingMode: FacingMode,
+  options?: { includeUnknownFallback?: boolean }
+) {
+  return getCameraCandidates(cameras, facingMode, options)[0] ?? null;
+}
+
+function getCameraScore(camera: CameraDeviceOption, facingMode: FacingMode) {
+  const label = camera.label.toLowerCase();
+  const cameraIndex = getAndroidCameraIndex(label);
+  let score = 0;
+
+  if (camera.facing === facingMode) {
+    score += 20;
+  }
+
+  if (facingMode === "environment") {
+    if (cameraIndex === 0) {
+      score += 85;
+    } else if (typeof cameraIndex === "number") {
+      score -= Math.min(cameraIndex * 10, 40);
+    }
+
+    if (/(main|primary|standard|1x)/.test(label)) {
+      score += 95;
+    }
+
+    if (/(back|rear|environment|world)/.test(label)) {
+      score += 70;
+    }
+
+    if (/wide/.test(label) && !/(ultra|0\.5|0,5|super[\s-]?wide)/.test(label)) {
+      score += 45;
+    }
+
+    if (/(ultra|0\.5|0,5|super[\s-]?wide)/.test(label)) {
+      score -= 110;
+    }
+
+    if (/(tele|zoom|2x|3x|portrait|periscope|macro|depth)/.test(label)) {
+      score -= 105;
+    }
+  } else if (/(front|user|selfie)/.test(label)) {
+    score += 55;
+
+    if (cameraIndex === 1) {
+      score += 35;
+    }
+  }
+
+  return score;
+}
+
+function getAndroidCameraIndex(label: string) {
+  const match = label.match(/\bcamera(?:2)?\s*(\d+)\b/);
+
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1]);
+}
+
+function getReadableCameraLabel(label: string | undefined, facingMode: FacingMode) {
+  if (!label) {
+    return facingMode === "environment" ? "Rear" : "Front";
+  }
+
+  const normalized = label.toLowerCase();
+
+  if (/(ultra|0\.5)/.test(normalized)) {
+    return "Ultra wide";
+  }
+
+  if (/wide/.test(normalized)) {
+    return "Wide";
+  }
+
+  if (/(tele|zoom|2x|3x|portrait)/.test(normalized)) {
+    return "Telephoto";
+  }
+
+  if (/(front|user|selfie)/.test(normalized)) {
+    return "Front";
+  }
+
+  if (/(back|rear|environment|world|main)/.test(normalized)) {
+    return "Rear";
+  }
+
+  return label;
+}
+
+function getZoomRange(track: MediaStreamTrack): ZoomRange | null {
+  if (!("getCapabilities" in track)) {
+    return null;
+  }
+
+  const capabilities = track.getCapabilities() as ZoomMediaTrackCapabilities;
+  const zoom = capabilities.zoom;
+
+  if (
+    typeof zoom?.min !== "number" ||
+    typeof zoom.max !== "number" ||
+    zoom.max <= zoom.min
+  ) {
+    return null;
+  }
+
+  return {
+    max: zoom.max,
+    min: zoom.min,
+    step: typeof zoom.step === "number" && zoom.step > 0 ? zoom.step : 0.1,
+  };
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getVoicePrompt({
+  cameraError,
+  connectionState,
+  isMicOn,
+  latestSystemText,
+  liveReady,
+  statusText,
+}: VoicePromptInput) {
+  if (connectionState === "error") {
+    return latestSystemText ?? "Could not start voice.";
+  }
+
+  if (!liveReady) {
+    return "Preview mode only.";
+  }
+
+  if (cameraError) {
+    return cameraError;
+  }
+
+  if (connectionState === "connecting") {
+    return statusText === "Starting audio" ? "Starting speaker..." : "Connecting...";
+  }
+
+  if (connectionState === "connected") {
+    if (statusText === "Speaking") {
+      return "Speaking...";
+    }
+
+    return isMicOn ? "Listening..." : "Mic muted.";
+  }
+
+  return "Tap Start, then speak.";
+}
+
+async function readLiveTokenResponse(response: Response): Promise<LiveTokenResponse> {
+  const text = await response.text();
+
+  if (!text) {
+    return response.ok
+      ? {}
+      : { error: `Could not start Gemini Live (${response.status}).` };
+  }
+
+  try {
+    return JSON.parse(text) as LiveTokenResponse;
+  } catch {
+    return {
+      error:
+        text.replace(/\s+/g, " ").slice(0, 180) ||
+        `Could not start Gemini Live (${response.status}).`,
+    };
+  }
+}
+
+function getPcmSampleRate(mimeType?: string) {
+  const match = mimeType?.match(/rate=(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function base64ToUint8Array(base64: string) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+function arrayBufferToBase64(buffer: ArrayBufferLike) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return window.btoa(binary);
+}
+
+function downsampleToPcm16(
+  input: Float32Array,
+  inputSampleRate: number,
+  outputSampleRate: number
+) {
+  if (outputSampleRate === inputSampleRate) {
+    return floatToPcm16(input);
+  }
+
+  if (outputSampleRate > inputSampleRate) {
+    return floatToPcm16(input);
+  }
+
+  const ratio = inputSampleRate / outputSampleRate;
+  const outputLength = Math.floor(input.length / ratio);
+  const output = new Float32Array(outputLength);
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const start = Math.floor(index * ratio);
+    const end = Math.min(Math.floor((index + 1) * ratio), input.length);
+    let total = 0;
+    let count = 0;
+
+    for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+      total += input[sampleIndex] ?? 0;
+      count += 1;
+    }
+
+    output[index] = count > 0 ? total / count : 0;
+  }
+
+  return floatToPcm16(output);
+}
+
+function floatToPcm16(input: Float32Array) {
+  const output = new Int16Array(input.length);
+
+  for (let index = 0; index < input.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, input[index] ?? 0));
+    output[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+
+  return output;
 }

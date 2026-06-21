@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { TrendingDown } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -11,7 +11,12 @@ import {
   YAxis,
 } from "recharts";
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   ChartConfig,
   ChartContainer,
@@ -142,6 +147,10 @@ export function WeightTrendCard({
             compact ? "h-[170px] min-h-[170px]" : "h-[230px] min-h-[230px]"
           )}
           config={chartConfig}
+          initialDimension={{
+            width: 300,
+            height: compact ? 170 : 230,
+          }}
         >
           <AreaChart data={filteredData} margin={{ left: 0, right: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />

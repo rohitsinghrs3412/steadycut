@@ -1,4 +1,4 @@
-import { ProgressSectionPage } from "@/components/steadycut/sections/progress-section";
+import { ProgressSectionPage } from "@/components/steadycut/sections/progress";
 import { getAppRouteContext } from "@/lib/app-route";
 
 export default async function ProgressPage() {

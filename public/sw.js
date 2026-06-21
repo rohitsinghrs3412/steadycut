@@ -25,7 +25,6 @@ self.addEventListener("install", (event) => {
     caches
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(APP_SHELL_URLS))
-      .then(() => self.skipWaiting())
   );
 });
 
@@ -40,7 +39,6 @@ self.addEventListener("activate", (event) => {
             .map((key) => caches.delete(key))
         )
       )
-      .then(() => self.clients.claim())
   );
 });
 
@@ -67,6 +65,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/_next/image") ||
+    url.pathname.endsWith(".woff2") ||
     url.pathname === "/icon.svg" ||
     url.pathname === "/maskable-icon.svg" ||
     url.pathname === "/apple-touch-icon.svg" ||

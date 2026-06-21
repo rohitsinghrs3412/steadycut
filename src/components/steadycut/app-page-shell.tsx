@@ -33,7 +33,7 @@ export function AppPageShell({
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
       <DesktopAppSidebar streak={streak} />
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-10 flex h-16 items-center border-b bg-background/95 px-4 backdrop-blur lg:px-8">
+        <header className="sticky top-0 z-10 flex h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] items-center border-b bg-background/95 px-4 backdrop-blur lg:px-8">
           <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <MobileNavButton streak={streak} />

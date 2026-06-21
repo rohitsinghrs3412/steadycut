@@ -35,7 +35,7 @@ export const hasAppAuthorizationConfig = Boolean(
 );
 
 export const hasCoreServerConfig =
-  wantsLiveServices && hasLiveServices;
+  wantsLiveServices && hasLiveServices && hasAppAuthorizationConfig;
 
 export const isLiveModeMisconfigured =
   wantsLiveServices && !hasCoreServerConfig;

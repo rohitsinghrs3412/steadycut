@@ -1,4 +1,4 @@
-import { HabitsSectionPage } from "@/components/steadycut/sections/habits-section";
+import { HabitsSectionPage } from "@/components/steadycut/sections/habits";
 import { getAppRouteContext } from "@/lib/app-route";
 
 export default async function HabitsPage() {

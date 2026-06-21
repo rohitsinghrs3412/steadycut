@@ -83,7 +83,7 @@ export function AppSidebarContent({ streak = 0 }: { streak?: number }) {
   const profileName = dashboard?.profile?.displayName?.trim();
 
   return (
-    <div className="flex h-full flex-col p-5">
+    <div className="flex h-full flex-col p-5 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
       <Link className="group flex items-center gap-3 transition-transform duration-200 active:scale-[0.98]" href="/dashboard">
         <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:scale-105">
           <Flame />

@@ -51,34 +51,41 @@ export const sendDueReminders = internalAction({
     let sent = 0;
 
     for (const subscription of subscriptions) {
-      const local = getLocalDateParts(subscription.timezone);
-
-      if (
-        local.hour !== subscription.reminderHourLocal ||
-        subscription.lastSentDate === local.date
-      ) {
-        continue;
-      }
-
       try {
-        await sendPush(subscription, {
-          title: "Morning weigh-in?",
-          body: "Log today's weight while the signal is clean.",
-          url: "/dashboard",
-          icon: "/icon-192x192.png",
-          badge: "/badge-96x96.png",
-        });
-        await ctx.runMutation(internal.pushNotifications.markReminderSent, {
-          id: subscription._id,
-          date: local.date,
-        });
-        sent += 1;
-      } catch (caught) {
-        if (isGonePushSubscription(caught)) {
-          await ctx.runMutation(internal.pushNotifications.deleteSubscriptionById, {
-            id: subscription._id,
-          });
+        const local = getLocalDateParts(subscription.timezone);
+
+        if (
+          local.hour !== subscription.reminderHourLocal ||
+          subscription.lastSentDate === local.date
+        ) {
+          continue;
         }
+
+        try {
+          await sendPush(subscription, {
+            title: "Morning weigh-in?",
+            body: "Log today's weight while the signal is clean.",
+            url: "/dashboard",
+            icon: "/icon-192x192.png",
+            badge: "/badge-96x96.png",
+          });
+          await ctx.runMutation(internal.pushNotifications.markReminderSent, {
+            id: subscription._id,
+            date: local.date,
+          });
+          sent += 1;
+        } catch (caught) {
+          if (isGonePushSubscription(caught)) {
+            await ctx.runMutation(internal.pushNotifications.deleteSubscriptionById, {
+              id: subscription._id,
+            });
+          }
+        }
+      } catch (timezoneError) {
+        console.error(
+          `Failed to process reminder for subscription ${subscription._id} due to invalid timezone "${subscription.timezone}":`,
+          timezoneError
+        );
       }
     }
 

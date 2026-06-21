@@ -16,6 +16,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 8,
     carbsPer100g: 22,
     fatPer100g: 5.5,
+    defaultPortionGrams: 350,
   },
   {
     patterns: [/\bbiryani\b/i],
@@ -24,6 +25,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 6,
     carbsPer100g: 24,
     fatPer100g: 5,
+    defaultPortionGrams: 350,
   },
   {
     patterns: [/\bmashed\s+potato(?:es)?\b/i, /\bpotato\s+mash\b/i],
@@ -32,6 +34,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 2,
     carbsPer100g: 15,
     fatPer100g: 3,
+    defaultPortionGrams: 150,
   },
   {
     patterns: [/\bmilk\b/i],
@@ -40,6 +43,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 3.2,
     carbsPer100g: 4.8,
     fatPer100g: 3.3,
+    defaultPortionGrams: 250,
   },
   {
     patterns: [/\bbanana\b/i],
@@ -57,6 +61,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 7,
     carbsPer100g: 46,
     fatPer100g: 38,
+    defaultPortionGrams: 40,
   },
   {
     patterns: [/\bcooked\s+rice\b/i, /\bwhite\s+rice\b/i, /\brice\b/i],
@@ -65,6 +70,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 2.7,
     carbsPer100g: 28,
     fatPer100g: 0.3,
+    defaultPortionGrams: 150,
   },
   {
     patterns: [/\broti\b/i, /\bchapati\b/i],
@@ -73,6 +79,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 8,
     carbsPer100g: 46,
     fatPer100g: 5,
+    defaultPortionGrams: 40,
   },
   {
     patterns: [/\bdal\b/i, /\bdaal\b/i, /\blentil\b/i],
@@ -81,6 +88,7 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 7,
     carbsPer100g: 18,
     fatPer100g: 3,
+    defaultPortionGrams: 150,
   },
   {
     patterns: [/\bpaneer\b/i],
@@ -89,5 +97,6 @@ export const KNOWN_FOOD_ESTIMATES: readonly KnownFoodEstimate[] = [
     proteinPer100g: 18,
     carbsPer100g: 3,
     fatPer100g: 20,
+    defaultPortionGrams: 100,
   },
 ];

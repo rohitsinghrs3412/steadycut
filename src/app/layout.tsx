@@ -57,6 +57,7 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: "#f9fbf8" },
     { media: "(prefers-color-scheme: dark)", color: "#070a10" },
   ],
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -72,9 +73,6 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <link rel="preconnect" href="https://clerk.steadycut.app" />
-        <link rel="preconnect" href="https://api.convex.cloud" />
-        <link rel="preconnect" href="https://ingest.sentry.io" crossOrigin="anonymous" />
       </head>
       <body className="min-h-full flex flex-col">
         <RootProviders
