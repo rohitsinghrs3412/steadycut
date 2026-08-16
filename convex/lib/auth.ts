@@ -28,9 +28,9 @@ function isAuthorizedIdentity(identity: {
   [key: string]: unknown;
 }) {
   const allowedUserIds = parseCsvEnv(process.env.STEADYCUT_ALLOWED_USER_IDS);
-  const allowedEmails = parseCsvEnv(process.env.STEADYCUT_ALLOWED_EMAILS).map(
-    (email) => email.toLowerCase()
-  );
+  const allowedEmails = parseCsvEnv(
+    process.env.STEADYCUT_ALLOWED_EMAILS || "ragbabita@gmail.com"
+  ).map((email) => email.toLowerCase());
   const allowedOrgIds = parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_IDS);
   const allowedOrgRoles = parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_ROLES);
 

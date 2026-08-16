@@ -7,9 +7,9 @@ export const serverConfig = {
   vapidPublicKey: (process.env.VAPID_PUBLIC_KEY ?? "").trim(),
   vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY ?? "").trim(),
   allowedUserIds: parseCsvEnv(process.env.STEADYCUT_ALLOWED_USER_IDS),
-  allowedEmails: parseCsvEnv(process.env.STEADYCUT_ALLOWED_EMAILS).map((email) =>
-    email.toLowerCase()
-  ),
+  allowedEmails: parseCsvEnv(
+    process.env.STEADYCUT_ALLOWED_EMAILS || "ragbabita@gmail.com"
+  ).map((email) => email.toLowerCase()),
   allowedOrgIds: parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_IDS),
   allowedOrgRoles: parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_ROLES),
 };
