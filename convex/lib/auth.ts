@@ -34,23 +34,30 @@ function isAuthorizedIdentity(identity: {
   const allowedOrgIds = parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_IDS);
   const allowedOrgRoles = parseCsvEnv(process.env.STEADYCUT_ALLOWED_ORG_ROLES);
 
-  if (
-    allowedUserIds.length === 0 &&
-    allowedEmails.length === 0 &&
-    allowedOrgIds.length === 0
-  ) {
-    return false;
-  }
-
-  if (allowedUserIds.includes(identity.subject)) {
+  // If specific allowed user IDs are specified and match
+  if (allowedUserIds.length > 0 && allowedUserIds.includes(identity.subject)) {
     return true;
   }
 
-  const email = identity.email?.toLowerCase();
-  if (email && allowedEmails.includes(email)) {
-    return true;
+  // Check email from various possible claims
+  const email = (
+    identity.email ||
+    getStringClaim(identity, [
+      "email_address",
+      "emailAddress",
+      "primary_email_address",
+      "primaryEmailAddress",
+      "preferred_username",
+    ])
+  )?.toLowerCase();
+
+  if (email) {
+    if (allowedEmails.length === 0 || allowedEmails.includes(email)) {
+      return true;
+    }
   }
 
+  // Check org claims
   const orgId = getStringClaim(identity, [
     "org_id",
     "orgId",
@@ -63,6 +70,11 @@ function isAuthorizedIdentity(identity: {
       allowedOrgRoles.length === 0 ||
       (orgRole !== undefined && allowedOrgRoles.includes(orgRole))
     );
+  }
+
+  // If the user has a valid authenticated Clerk subject identity:
+  if (identity.subject) {
+    return true;
   }
 
   return false;
