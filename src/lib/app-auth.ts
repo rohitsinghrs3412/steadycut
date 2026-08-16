@@ -52,8 +52,12 @@ export async function isAuthorizedAppUser(authState: ClerkAuthState) {
     return true;
   }
 
-  const userEmail = await getCurrentUserEmail();
-  if (userEmail && serverConfig.allowedEmails.includes(userEmail)) {
+  const userEmails = await getCurrentUserEmails();
+  if (
+    userEmails.some((userEmail) =>
+      serverConfig.allowedEmails.includes(userEmail)
+    )
+  ) {
     return true;
   }
 
@@ -73,20 +77,27 @@ export async function isAuthorizedAppUser(authState: ClerkAuthState) {
   return false;
 }
 
-async function getCurrentUserEmail() {
+async function getCurrentUserEmails(): Promise<string[]> {
   if (serverConfig.allowedEmails.length === 0) {
-    return null;
+    return [];
   }
 
   const user = await currentUser();
-  const primaryEmail =
-    user?.primaryEmailAddress?.emailAddress ??
-    user?.emailAddresses.find(
-      (email) => email.id === user.primaryEmailAddressId
-    )?.emailAddress ??
-    null;
+  if (!user) {
+    return [];
+  }
 
-  return primaryEmail?.toLowerCase() ?? null;
+  const list: string[] = [];
+  if (user.primaryEmailAddress?.emailAddress) {
+    list.push(user.primaryEmailAddress.emailAddress.toLowerCase());
+  }
+  for (const item of user.emailAddresses) {
+    if (item.emailAddress) {
+      list.push(item.emailAddress.toLowerCase());
+    }
+  }
+
+  return Array.from(new Set(list));
 }
 
 function getFirstStringClaim(claims: AuthClaims, keys: string[]) {

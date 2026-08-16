@@ -2,12 +2,17 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
 import { NotAuthorizedScreen } from "@/components/steadycut/not-authorized-screen";
+import { isAuthorizedAppUser } from "@/lib/app-auth";
 
 export default async function NotAuthorizedPage() {
   const authState = await auth();
 
   if (!authState.userId) {
     redirect("/sign-in");
+  }
+
+  if (await isAuthorizedAppUser(authState)) {
+    redirect("/dashboard");
   }
 
   const user = await currentUser();
