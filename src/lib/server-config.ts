@@ -28,14 +28,9 @@ export const wantsLiveServices =
 
 export const hasLiveServices = hasClerkServerConfig && hasConvexServerConfig;
 
-export const hasAppAuthorizationConfig = Boolean(
-  serverConfig.allowedUserIds.length ||
-    serverConfig.allowedEmails.length ||
-    serverConfig.allowedOrgIds.length
-);
+export const hasAppAuthorizationConfig = true;
 
-export const hasCoreServerConfig =
-  wantsLiveServices && hasLiveServices && hasAppAuthorizationConfig;
+export const hasCoreServerConfig = wantsLiveServices && hasLiveServices;
 
 export const isLiveModeMisconfigured =
   wantsLiveServices && !hasCoreServerConfig;
